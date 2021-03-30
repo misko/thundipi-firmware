@@ -77,7 +77,8 @@ float read_current(int channel) {
   float ratio = (2000.0+3300.0)/3300.0;
   float vout = read_voltage(channel)*ratio;
   float current = (vout-1.65)/0.044;
-  printf("VOUT %f , current %f\r\n\n",vout,current);
+  //printf("VOUT %f , current %f\r\n\n",vout,current);
+  return current;
 }
 SL_WEAK void app_process_action(void)
 {
@@ -91,11 +92,11 @@ SL_WEAK void app_process_action(void)
   uint16_t v1 = ads1115_readADC_SingleEnded(&ads1115_sensor, 1);
   uint16_t v2 = ads1115_readADC_SingleEnded(&ads1115_sensor, 2);
   uint16_t v3 = ads1115_readADC_SingleEnded(&ads1115_sensor, 3);*/
-  float v0 = read_voltage(0);
-  float v1 = read_voltage(1);
-  float v2 = read_voltage(2);
-  float v3 = read_voltage(3);
-  float c0 = read_current(0);
+  //float v0 = read_voltage(0);
+  //float v1 = read_voltage(1);
+  //float v2 = read_voltage(2);
+  //float v3 = read_voltage(3);
+  //float c0 = read_current(0);
   //printf("%f %f %f %f\r\n\n",v0,v1,v2,v3);
 }
 
@@ -103,7 +104,7 @@ static void aio_system_boot_cb(void)
 {
   sl_status_t sc;
   uint8_t value_out = 1;
-  sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsA, 0, 1, &value_out);
+  /*sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsA, 0, 1, &value_out);
   sl_app_assert(sc == SL_STATUS_OK,
                 "[E: 0x%04x] Failed to write attribute value\n",
                 (int)sc);
@@ -118,7 +119,7 @@ static void aio_system_boot_cb(void)
   sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsD, 0, 1, &value_out);
   sl_app_assert(sc == SL_STATUS_OK,
                 "[E: 0x%04x] Failed to write attribute value\n",
-                (int)sc);
+                (int)sc);*/
 }
 
 
@@ -138,6 +139,7 @@ static void aio_digital_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *d
 {
   sl_status_t sc;
   uint8_t value =GPIO_PinOutGet(port,pin);
+  //TODO can batch it all into one value
   sc = sl_bt_gatt_server_send_user_read_response(
     data->connection,
     data->characteristic,
@@ -150,6 +152,115 @@ static void aio_digital_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *d
                 (int)sc);
 }
 
+
+
+static void aio_digital_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data)
+{
+  sl_status_t sc;
+  uint8_t s[4];
+  for (int i=0; i<4; i++) {
+      int pin=0; int port=0;
+      channel_to_port_and_pin(i,&pin,&port);
+      s[i]=GPIO_PinOutGet(port,pin);
+  }
+
+  sc = sl_bt_gatt_server_send_user_read_response(
+    data->connection,
+    data->characteristic,
+    0,
+    4,
+    s,
+    NULL);
+  sl_app_assert(sc == SL_STATUS_OK,
+                "[E: 0x%04x] Failed to send user read response\n",
+                (int)sc);
+}
+
+
+static void aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data)
+{
+  sl_status_t sc;
+  int16_t s[4];
+  s[0]=(int)(100*read_current(0));
+  s[1]=(int)(100*read_current(1));
+  s[2]=(int)(100*read_current(2));
+  s[3]=(int)(100*read_current(3));
+
+  sc = sl_bt_gatt_server_send_user_read_response(
+    data->connection,
+    data->characteristic,
+    0,
+    2*4,
+    &s,
+    NULL);
+  sl_app_assert(sc == SL_STATUS_OK,
+                "[E: 0x%04x] Failed to send user read response\n",
+                (int)sc);
+}
+
+static void aio_analog_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *data,int channel)
+{
+  sl_status_t sc;
+  int16_t current = (int)(100*read_current(channel));
+  //printf("CURRENT ISXX %d\r\n\n",current);
+  sc = sl_bt_gatt_server_send_user_read_response(
+    data->connection,
+    data->characteristic,
+    0,
+    2,
+    &current,
+    NULL);
+  sl_app_assert(sc == SL_STATUS_OK,
+                "[E: 0x%04x] Failed to send user read response\n",
+                (int)sc);
+}
+
+void channel_to_port_and_pin(int channel, int * port, int * pin) {
+  switch(channel) {
+    case 0:
+      *port=gpioPortA;
+      *pin=7;
+      break;
+    case 1:
+      *port=gpioPortA;
+      *pin=8;
+      break;
+    case 2:
+      *port=gpioPortC;
+      *pin=7;
+      break;
+    case 3:
+      *port=gpioPortC;
+      *pin=6;
+      break;
+    default:
+      sl_app_assert(1==0, "[E: 0x%04x] Invalid channel\n", channel);
+  }
+}
+
+static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_request_t *data) {
+  sl_status_t sc;
+  uint8_t att_errorcode = 0;
+  //printf("WTIING\r\n\n");
+  for (int i=0; i<data->value.len; i++) {
+      int port=0;
+      int pin=0;
+      channel_to_port_and_pin(i,&port,&pin);
+        if (data->value.data[i]==0) {
+            GPIO_PinOutClear(port,pin);
+        } else if (data->value.data[i]==1) {
+            GPIO_PinOutSet(port,pin);
+        } else {
+            printf("Weird value to write to pin! %d\n",data->value.data[i]);
+        }
+  }
+  sc = sl_bt_gatt_server_send_user_write_response(data->connection,
+                                                  data->characteristic,
+                                                  att_errorcode);
+  sl_app_assert(sc == SL_STATUS_OK,
+                "[E: 0x%04x] Failed to send user write response\n",
+                (int)sc);
+}
 
 static void aio_digital_out_write_cb(sl_bt_evt_gatt_server_user_write_request_t *data,int port, int pin)
 {
@@ -236,18 +347,48 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
     case sl_bt_evt_gatt_server_user_read_request_id:
       switch (evt->data.evt_gatt_server_user_read_request.characteristic) {
-        case gattdb_digitalA:
-          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortA,8);
-          break;
-        case gattdb_digitalB:
+        /*case gattdb_digitalA:
+          printf("Reading from A\r\n\n");
           aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortA,7);
           break;
+        case gattdb_digitalB:
+          printf("Reading from B\r\n\n");
+          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortA,8);
+          break;
         case gattdb_digitalC:
+          printf("Reading from C\r\n\n");
           aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortC,6);
           break;
         case gattdb_digitalD:
+          printf("Reading from D\r\n\n");
           aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortC,7);
           break;
+        case gattdb_analogA:
+          printf("Reading from AA\r\n\n");
+          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,0);
+          break;
+        case gattdb_analogB:
+          printf("Reading from AA\r\n\n");
+          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,1);
+          break;
+        case gattdb_analogC:
+          printf("Reading from AA\r\n\n");
+          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,2);
+          break;
+        case gattdb_analogD:
+          printf("Reading from AA\r\n\n");
+          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,3);
+          break;*/
+        case gattdb_switch:
+          //printf("Reading from switch\r\n\n");
+          aio_digital_out_read_cb_all(&evt->data.evt_gatt_server_user_read_request);
+          break;
+        case gattdb_amps:
+          ///printf("Reading from amps\r\n\n");
+          aio_analog_out_read_cb_all(&evt->data.evt_gatt_server_user_read_request);
+          break;
+        default:
+          printf("Reading from ? %d\r\n\n", evt->data.evt_gatt_server_user_read_request.characteristic);
       }
       break;
 
@@ -261,17 +402,27 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
     case sl_bt_evt_gatt_server_user_write_request_id:
       switch (evt->data.evt_gatt_server_user_read_request.characteristic) {
-        case gattdb_digitalA:
-          aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortA,8);
+        /*case gattdb_digitalA:
+          printf("Writing to A\r\n\n");
+          aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortA,7);
           break;
         case gattdb_digitalB:
-          aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortA,7);
+          printf("Writing to B\r\n\n");
+          aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortA,8);
           break;
         case gattdb_digitalC:
           aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortC,6);
           break;
         case gattdb_digitalD:
           aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortC,7);
+          break;*/
+        case gattdb_switch:
+          printf("WRITE TO SWTCI\r\n\n");
+          aio_digital_out_write_cb_all(&evt->data.evt_gatt_server_user_write_request);
+          break;
+        default:
+
+          printf("WRITE TO WTF\r\n\n");
           break;
       }
       break;
@@ -366,11 +517,11 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       break;
 
     case sl_bt_evt_gatt_server_user_write_request_id:
-        printf("WRITE\n");
+        //printf("WRITE\n");
         break;
 
     case sl_bt_evt_gatt_server_user_read_request_id:
-        printf("READ\n");
+        //printf("READ\n");
         break;
 
 
