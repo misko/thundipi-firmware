@@ -22,7 +22,6 @@ component:
 - {id: iostream_retarget_stdio}
 - {id: iostream_swo}
 - {id: mpu}
-- {id: rail_util_pti}
 - instance: [ads1115]
   id: i2cspm
 - {id: printf}
@@ -30,6 +29,7 @@ component:
 - {id: ota_dfu}
 - {id: brd4184a}
 - {id: bootloader_interface}
+- {id: rail_util_pti}
 - {id: app_assert}
 - {id: EFR32BG22C224F512IM40}
 - {id: bt_fp_soc_default}

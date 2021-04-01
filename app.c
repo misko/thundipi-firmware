@@ -38,28 +38,11 @@ static struct I2C_ADS1115 ads1115_sensor;
  *****************************************************************************/
 SL_WEAK void app_init(void)
 {
-  /////////////////////////////////////////////////////////////////////////////
-  // Put your additional application init code here!                         //
-  // This is called once during start-up.                                    //
-  /////////////////////////////////////////////////////////////////////////////
-  ///
-  ///
-  /// This works with existing board
-  //GPIO_PinModeSet(gpioPortA,7,  gpioModeWiredOrPullDown,0);
-  //GPIO_PinModeSet(gpioPortA,8,  gpioModeWiredOrPullDown,0);
-  //GPIO_PinModeSet(gpioPortC,6,  gpioModeWiredOrPullDown,0);
-  //GPIO_PinModeSet(gpioPortC,7,  gpioModeWiredOrPullDown,0);
 
-  //Used as of March 26 2021
-  //GPIO_PinModeSet(gpioPortA,7,  gpioModeWiredAnd,0);
-  //GPIO_PinModeSet(gpioPortA,8,  gpioModeWiredAnd,0);
-  //GPIO_PinModeSet(gpioPortC,6,  gpioModeWiredAnd,0);
-  //GPIO_PinModeSet(gpioPortC,7,  gpioModeWiredAnd,0);
-
-  GPIO_PinModeSet(gpioPortA,7,  gpioModeWiredAndPullUp,1);
-  GPIO_PinModeSet(gpioPortA,8,  gpioModeWiredAndPullUp,1);
-  GPIO_PinModeSet(gpioPortC,6,  gpioModeWiredAndPullUp,1);
-  GPIO_PinModeSet(gpioPortC,7,  gpioModeWiredAndPullUp,1);
+  GPIO_PinModeSet(gpioPortA,7,  gpioModeWiredAndPullUp,0);
+  GPIO_PinModeSet(gpioPortA,8,  gpioModeWiredAndPullUp,0);
+  GPIO_PinModeSet(gpioPortC,6,  gpioModeWiredAndPullUp,0);
+  GPIO_PinModeSet(gpioPortC,7,  gpioModeWiredAndPullUp,0);
 
   sl_ads_init(&ads1115_sensor);
 
@@ -68,6 +51,29 @@ SL_WEAK void app_init(void)
 /**************************************************************************//**
  * Application Process Action.
  *****************************************************************************/
+
+void channel_to_port_and_pin(int channel, int * port, int * pin) {
+  switch(channel) {
+    case 0:
+      *port=gpioPortA;
+      *pin=7;
+      break;
+    case 1:
+      *port=gpioPortA;
+      *pin=8;
+      break;
+    case 2:
+      *port=gpioPortC;
+      *pin=7;
+      break;
+    case 3:
+      *port=gpioPortC;
+      *pin=6;
+      break;
+    default:
+      sl_app_assert(1==0, "[E: 0x%04x] Invalid channel\n", channel);
+  }
+}
 float read_voltage(int channel) {
   uint16_t v0 = ads1115_readADC_SingleEnded(&ads1115_sensor, channel);
   return v0*(4.096/(1<<15));
@@ -160,8 +166,9 @@ static void aio_digital_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_
   uint8_t s[4];
   for (int i=0; i<4; i++) {
       int pin=0; int port=0;
-      channel_to_port_and_pin(i,&pin,&port);
+      channel_to_port_and_pin(i,&port,&pin);
       s[i]=GPIO_PinOutGet(port,pin);
+      //printf("PORT %d pin %d out %d\r\n\n",port,pin,s[i]);
   }
 
   sc = sl_bt_gatt_server_send_user_read_response(
@@ -215,28 +222,6 @@ static void aio_analog_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *da
                 (int)sc);
 }
 
-void channel_to_port_and_pin(int channel, int * port, int * pin) {
-  switch(channel) {
-    case 0:
-      *port=gpioPortA;
-      *pin=7;
-      break;
-    case 1:
-      *port=gpioPortA;
-      *pin=8;
-      break;
-    case 2:
-      *port=gpioPortC;
-      *pin=7;
-      break;
-    case 3:
-      *port=gpioPortC;
-      *pin=6;
-      break;
-    default:
-      sl_app_assert(1==0, "[E: 0x%04x] Invalid channel\n", channel);
-  }
-}
 
 static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_request_t *data) {
   sl_status_t sc;
@@ -292,17 +277,78 @@ static uint8_t _conn_handle = 0xFF;
 static uint8_t _bonding_handle = 0xFF;
 void sl_bt_aio_process(sl_bt_msg_t *evt) {
   // Handle stack events
+  //printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
   switch (SL_BT_MSG_ID(evt->header)) {
     case sl_bt_evt_system_boot_id:
       aio_system_boot_cb();
-      sl_bt_sm_configure(0x0F, sm_io_capability_displayyesno);
+      //sl_bt_sm_delete_bondings();
+      sl_bt_sm_store_bonding_configuration(8, 2);
+      sl_bt_sm_set_passkey(0);
+      sl_bt_sm_configure(0x0B, sm_io_capability_displayyesno); //sm_io_capability_displayonly); //0x0F, sm_io_capability_displayyesno);// );
       sl_bt_sm_set_bondable_mode(1);
+      printf("sl_bt_evt_system_boot_id\r\n\n");
       break;
 
     case sl_bt_evt_sm_confirm_bonding_id:
-      printf("CONFIRM BOND\n");
-      sl_bt_sm_bonding_confirm(_conn_handle,1);
+        printf("sl_bt_evt_sm_confirm_bonding_id\r\n\n");
+        printf("    Event Parameters:\r\n\n");
+        printf("        connection:     0x%02x\r\n\n", evt->data.evt_sm_confirm_bonding.connection);
+        printf("        bonding_handle: %02d\r\n\n",   evt->data.evt_sm_confirm_bonding.bonding_handle);
+       //sl_bt_sm_bonding_confirm(_conn_handle,1);
+       sl_bt_sm_bonding_confirm(evt->data.evt_sm_confirm_bonding.connection,1);
+       printf("Return from bonding\r\n\n");
+
       break;
+
+    case sl_bt_evt_connection_parameters_id:
+        printf("sl_bt_evt_connection_parameters_id\r\n\n");
+        printf("    Event Parameters:\r\n");
+        printf("        connection:    0x%02x\r\n\n", evt->data.evt_connection_parameters.connection);
+        printf("        interval:      0x%04x\r\n\n", evt->data.evt_connection_parameters.interval);
+        printf("        latency:       0x%04x\r\n\n", evt->data.evt_connection_parameters.latency);
+        printf("        timeout:       0x%04x\r\n\n", evt->data.evt_connection_parameters.timeout);
+        printf("        security_mode: %d\r\n\n",     evt->data.evt_connection_parameters.security_mode);
+        printf("        txsize:        0x%04x\r\n\n", evt->data.evt_connection_parameters.txsize);
+        uint8_t connection_handle = evt->data.evt_connection_parameters.connection;
+        if(evt->data.evt_connection_parameters.security_mode < 2) {
+          printf("Bonding Handle is: 0x%04X",_bonding_handle);
+          if(_bonding_handle == 0xFF)
+          {
+            printf("Increasing security.\r\n");
+            sl_bt_sm_increase_security(connection_handle);
+            //connectionToIncreasSec = connection_handle;
+          }
+          else
+          {
+            printf("Increasing security..\r\n");
+            sl_bt_sm_increase_security(connection_handle);
+          }
+        } else {
+          printf("Clear increase sec timer.\r\n");
+          //gecko_cmd_hardware_set_soft_timer(0, INCREASE_SEC_TMR_HANDLE, 1); //Clear timer
+        }
+        break;
+        //sl_bt_sm_increase_security(_conn_handle); //not sure about this
+        //sl_bt_sm_passkey_confirm(_conn_handle, 1);
+        break;
+
+    case sl_bt_evt_connection_phy_status_id:
+        printf("sl_bt_evt_connection_phy_status_id\r\n\n");
+        printf("    Event Parameters:\r\n\n");
+        printf("        connection: 0x%02x\r\n\n", evt->data.evt_connection_phy_status.connection);
+        printf("        phy:        0x%02x\r\n\n", evt->data.evt_connection_phy_status.phy);
+        break;
+    case sl_bt_evt_gatt_mtu_exchanged_id:
+        printf("sl_bt_evt_gatt_mtu_exchanged_id\r\n\n");
+        printf("    Event Parameters:\r\n\n");
+        printf("        connection: 0x%02x\r\n\n", evt->data.evt_gatt_mtu_exchanged.connection);
+        printf("        mtu:        0x%04x\r\n\n", evt->data.evt_gatt_mtu_exchanged.mtu);
+        break;
+
+    case sl_bt_evt_gatt_server_characteristic_status_id:
+      printf("sl_bt_evt_gatt_server_characteristic_status_id\r\n\n");
+      break;
+
 
     case sl_bt_evt_sm_passkey_display_id:
       printf("Passkey: %06lu", evt->data.evt_sm_passkey_display.passkey);
@@ -319,24 +365,48 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
       case sl_bt_evt_sm_bonded_id:
         printf("Bonded\r\n\n");
         printf("--------------------------------------\r\n\n");
-        printf("** SPP Mode ON **\r\n\n");
-       // _main_state = STATE_SPP_MODE;
-
-        //SLEEP_SleepBlockBegin(sleepEM2);  // disable sleeping when SPP mode active
-        sl_bt_connection_close(_conn_handle);
+        // sl_bt_connection_close(_conn_handle); // not sure if we need this?
         break;
 
       // Event raised when bonding failed
+        //reason codes are here, https://docs.silabs.com/mcu/latest/bgm13/group-sl-status
+        //((sl_status_t)0x1006) ->  SL_STATUS_BT_CTRL_PIN_OR_KEY_MISSING   ((sl_status_t)0x1006)
       case sl_bt_evt_sm_bonding_failed_id:
         printf("Bonding failed\r\n\n");
         printf("--------------------------------------\r\n\n");
-        //gecko_cmd_sm_increase_security(_conn_handle);
+        //gecko_cmd_sm_increase_security(_conn_handle);        case sl_bt_evt_sm_bonding_failed_id:
+        printf("sl_bt_evt_sm_bonding_failed_id\r\n\n");
+        printf("    Event Parameters:\r\n");
+        printf("        connection: 0x%02x\r\n", evt->data.evt_sm_bonding_failed.connection);
+        printf("        reason:     0x%04x\r\n\n", evt->data.evt_sm_bonding_failed.reason);
         break;
 
     case sl_bt_evt_connection_opened_id:
-      aio_connection_opened_cb(&evt->data.evt_connection_opened);
+        printf("sl_bt_evt_connection_opened_id\r\n\n");
+        printf("    Event Parameters:\r\n");
+        printf  ("        address:      %02x\r\n", evt->data.evt_connection_opened.address.addr[0]);
+        printf  (":%02x", evt->data.evt_connection_opened.address.addr[1]);
+        printf  (":%02x", evt->data.evt_connection_opened.address.addr[2]);
+        printf  (":%02x", evt->data.evt_connection_opened.address.addr[3]);
+        printf  (":%02x", evt->data.evt_connection_opened.address.addr[4]);
+        printf(":%02x\r\n", evt->data.evt_connection_opened.address.addr[5]);
+        printf("        address_type: 0x%02x\r\n", evt->data.evt_connection_opened.address_type);
+        printf("        master:       0x%02x\r\n", evt->data.evt_connection_opened.master);
+        printf("        connection:   0x%02x\r\n", evt->data.evt_connection_opened.connection);
+        printf("        bonding:      0x%02x\r\n", evt->data.evt_connection_opened.bonding);
+        printf("        advertiser:   0x%02x\r\n\n", evt->data.evt_connection_opened.advertiser);
+
+      aio_connection_opened_cb(&evt->data.evt_connection_opened); // not sure why we need this
+
       _conn_handle = evt->data.evt_connection_opened.connection;
       _bonding_handle = evt->data.evt_connection_opened.bonding;
+
+      if(_bonding_handle == 0xFF) {
+        printf("Increasing security\r\n");
+        sl_bt_sm_increase_security(_conn_handle);
+      } else {
+        printf("Already Bonded (ID: %d)\r\n", _bonding_handle);
+      }
       printf("Connection open\n");
       break;
 
@@ -346,6 +416,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
       break;
 
     case sl_bt_evt_gatt_server_user_read_request_id:
+      //printf("sl_bt_evt_gatt_server_user_read_request_id\r\n\n");
       switch (evt->data.evt_gatt_server_user_read_request.characteristic) {
         /*case gattdb_digitalA:
           printf("Reading from A\r\n\n");
@@ -417,11 +488,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
           aio_digital_out_write_cb(&evt->data.evt_gatt_server_user_write_request,gpioPortC,7);
           break;*/
         case gattdb_switch:
-          printf("WRITE TO SWTCI\r\n\n");
           aio_digital_out_write_cb_all(&evt->data.evt_gatt_server_user_write_request);
           break;
         default:
-
           printf("WRITE TO WTF\r\n\n");
           break;
       }
@@ -501,6 +570,13 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
     // -------------------------------
     // This event indicates that a new connection was opened.
     case sl_bt_evt_connection_opened_id:
+      sc = sl_bt_advertiser_start(
+        advertising_set_handle,
+        advertiser_general_discoverable,
+        advertiser_connectable_scannable);
+      sl_app_assert(sc == SL_STATUS_OK,
+                    "[E: 0x%04x] Failed to start advertising\n",
+                    (int)sc); // restart advertising right after?
       break;
 
     // -------------------------------
