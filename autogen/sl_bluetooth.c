@@ -3,20 +3,35 @@
 #include <em_common.h>
 #include "sl_bluetooth.h"
 #include "sl_bt_stack_init.h"
+
+#ifdef SL_COMPONENT_CATALOG_PRESENT
+#include "sl_component_catalog.h"
+#ifndef SL_CATALOG_GATT_CONFIGURATION_PRESENT
+#include "bg_gattdb_def.h"
+const struct bg_gattdb_def bg_gattdb_data = {0};
+#endif // SL_CATALOG_GATT_CONFIGURATION_PRESENT
+#endif // SL_COMPONENT_CATALOG_PRESENT
 #include "sl_ota_dfu.h"
 
 static const sl_bt_configuration_t config = SL_BT_CONFIG_DEFAULT;
 
+/** @brief Table of used BGAPI classes */
+static const struct sli_bgapi_class * const bt_class_table[] =
+{
+  SL_BT_BGAPI_CLASS(system),
+  SL_BT_BGAPI_CLASS(advertiser),
+  SL_BT_BGAPI_CLASS(scanner),
+  SL_BT_BGAPI_CLASS(connection),
+  SL_BT_BGAPI_CLASS(gatt),
+  SL_BT_BGAPI_CLASS(gatt_server),
+  SL_BT_BGAPI_CLASS(sm),
+  NULL
+};
+
 void sl_bt_init(void)
 {
   sl_bt_init_stack(&config);
-  sl_bt_class_system_init();
-  sl_bt_class_advertiser_init();
-  sl_bt_class_scanner_init();
-  sl_bt_class_connection_init();
-  sl_bt_class_gatt_init();
-  sl_bt_class_gatt_server_init();
-  sl_bt_class_sm_init();
+  sl_bt_init_classes(bt_class_table);
 }
 
 SL_WEAK void sl_bt_on_event(sl_bt_msg_t* evt)

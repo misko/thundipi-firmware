@@ -1,6 +1,6 @@
 /***************************************************************************//**
  * @file
- * @brief Simple Button Driver User Config
+ * @brief Simple Button Driver Instances
  *******************************************************************************
  * # License
  * <b>Copyright 2019 Silicon Laboratories Inc. www.silabs.com</b>
@@ -15,30 +15,15 @@
  *
  ******************************************************************************/
 
-#ifndef SL_SIMPLE_BUTTON_BTN0_CONFIG_H
-#define SL_SIMPLE_BUTTON_BTN0_CONFIG_H
+#ifndef SL_SIMPLE_BUTTON_INSTANCES_H
+#define SL_SIMPLE_BUTTON_INSTANCES_H
 
-#include "em_gpio.h"
 #include "sl_simple_button.h"
 
-// <<< Use Configuration Wizard in Context Menu >>>
+extern const sl_button_t sl_button_btn0;
 
-// <o SL_SIMPLE_BUTTON_BTN0_MODE>
-// <SL_SIMPLE_BUTTON_MODE_INTERRUPT=> Interrupt
-// <SL_SIMPLE_BUTTON_MODE_POLL_AND_DEBOUNCE=> Poll and Debounce
-// <SL_SIMPLE_BUTTON_MODE_POLL=> Poll
-// <i> Default: SL_SIMPLE_BUTTON_MODE_INTERRUPT
-#define SL_SIMPLE_BUTTON_BTN0_MODE       SL_SIMPLE_BUTTON_MODE_INTERRUPT
-// <<< end of configuration section >>>
 
-// <<< sl:start pin_tool >>>
+void sl_simple_button_init_instances(void);
+void sl_simple_button_poll_instances(void);
 
-// <gpio> SL_SIMPLE_BUTTON_BTN0
-// $[GPIO_SL_SIMPLE_BUTTON_BTN0]
-#define SL_SIMPLE_BUTTON_BTN0_PORT               gpioPortB
-#define SL_SIMPLE_BUTTON_BTN0_PIN                1
-// [GPIO_SL_SIMPLE_BUTTON_BTN0]$
-
-// <<< sl:end pin_tool >>>
-
-#endif // SL_SIMPLE_BUTTON_BTN0_CONFIG_H
+#endif // SL_SIMPLE_BUTTON_INSTANCES_H

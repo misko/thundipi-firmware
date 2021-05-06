@@ -25,10 +25,14 @@ extern "C" {
 #include "sl_i2cspm.h"
 
 
+#define SL_I2CSPM_INA3221_PRESENT
 #define SL_I2CSPM_ADS1115_PRESENT
+#define SL_I2CSPM_SENSOR_PRESENT
 
 
+extern sl_i2cspm_t *sl_i2cspm_INA3221;
 extern sl_i2cspm_t *sl_i2cspm_ads1115;
+extern sl_i2cspm_t *sl_i2cspm_sensor;
 
 void sl_i2cspm_init_instances(void);
 

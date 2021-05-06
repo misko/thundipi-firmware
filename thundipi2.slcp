@@ -20,16 +20,18 @@ project_name: thundipi2
 quality: production
 component:
 - {id: iostream_retarget_stdio}
+- instance: [btn0]
+  id: simple_button
 - {id: iostream_swo}
 - {id: mpu}
-- instance: [ads1115]
+- {id: rail_util_pti}
+- instance: [INA3221, ads1115, sensor]
   id: i2cspm
 - {id: printf}
 - {id: component_catalog}
 - {id: ota_dfu}
 - {id: brd4184a}
 - {id: bootloader_interface}
-- {id: rail_util_pti}
 - {id: app_assert}
 - {id: EFR32BG22C224F512IM40}
 - {id: bt_fp_soc_default}

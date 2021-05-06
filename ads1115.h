@@ -91,11 +91,9 @@
 #define ADS1015_REG_CONFIG_DR_250SPS (0x0020) ///< 250 samples per second
 #define ADS1015_REG_CONFIG_DR_490SPS (0x0040) ///< 490 samples per second
 #define ADS1015_REG_CONFIG_DR_920SPS (0x0060) ///< 920 samples per second
-#define ADS1015_REG_CONFIG_DR_1600SPS                                          \
-  (0x0080) ///< 1600 samples per second (default)
+#define ADS1015_REG_CONFIG_DR_1600SPS (0x0080) ///< 1600 Might be128SPS ADS1115
 #define ADS1015_REG_CONFIG_DR_2400SPS (0x00A0) ///< 2400 samples per second
 #define ADS1015_REG_CONFIG_DR_3300SPS (0x00C0) ///< 3300 samples per second
-
 #define ADS1015_REG_CONFIG_CMODE_MASK (0x0010) ///< CMode Mask
 #define ADS1015_REG_CONFIG_CMODE_TRAD                                          \
   (0x0000) ///< Traditional comparator with hysteresis (default)

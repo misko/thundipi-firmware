@@ -15,19 +15,9 @@ extern const struct bg_gattdb_def bg_gattdb_data;
 #define gattdb_device_name                    11
 #define gattdb_manufacturer_name_string       16
 #define gattdb_system_id                      18
-#define gattdb_digitalA                       21
-#define gattdb_characteristic_presentation_formatA 22
-#define gattdb_number_of_digitalsA            23
-#define gattdb_digitalB                       25
-#define gattdb_characteristic_presentation_formatB 26
-#define gattdb_number_of_digitalsB            27
-#define gattdb_digitalC                       29
-#define gattdb_characteristic_presentation_formatC 30
-#define gattdb_number_of_digitalsC            31
-#define gattdb_digitalD                       33
-#define gattdb_characteristic_presentation_formatD 34
-#define gattdb_number_of_digitalsD            35
-#define gattdb_ota_control                    38
+#define gattdb_switch                         21
+#define gattdb_amps                           23
+#define gattdb_ota_control                    26
 
 
 #endif // __GATT_DB_H

@@ -52,6 +52,7 @@ static sl_status_t sl_ads1115_read_data(struct I2C_ADS1115 * sensor, uint8_t i2c
   seq.flags = I2C_FLAG_WRITE;
   /* Select command to issue */
   seq.buf[0].data = reg;
+  //THIS SHOULD BE ADDY OF REG? TODO
   seq.buf[0].len  = 1;
 
   ret = I2CSPM_Transfer(sensor->i2cspm, &seq);
