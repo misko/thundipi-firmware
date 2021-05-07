@@ -18,16 +18,23 @@
 #include <INA3221.h>
 #include "em_common.h"
 #include "em_gpio.h"
+#include "em_core.h"
 #include "sl_app_assert.h"
 #include "sl_bluetooth.h"
 #include "sl_i2cspm.h"
 #include "ads1115.h"
 #include "gatt_db.h"
-#include "sl_simple_button_instances.h"
 #include "app.h"
 #include "em_i2c.h"
 #include "sl_i2cspm_instances.h"
 #include "sl_sleeptimer.h"
+#include "em_gpio.h"
+#include "gpiointerrupt.h"
+#include "em_cmu.h"
+#include "em_gpio.h"
+//#include "em_int.h"
+#include "em_gpio.h"
+#include "gpiointerrupt.h"
 
 enum RELAY_STATE {
   RELAY_OFF = 0,
@@ -45,6 +52,7 @@ enum APP_STATE {
 };
 
 #define NRELAYS 3
+#define NBUTTONS 4
 #define T_RELAY 0
 #define T_SWITCH 1
 #define TYPE 0
@@ -55,6 +63,8 @@ enum APP_STATE {
 static const  uint8_t UUID_SERVICE[2] = {0x15,0x18}; // backwards
 static const  uint8_t UUID_RELAY_CHAR[2] = {0x56,0x2A}; // backwards
 static uint8_t relay_state[NRELAYS] = {0,0,0};
+static uint8_t relay_changing[NRELAYS] = {0,0,0};
+static uint8_t button_debounce_state[NRELAYS] = {0,0,0};
 
 static int app_state = IDLE;
 
@@ -69,9 +79,14 @@ static uint8_t _conn_handle=0;
 //static uint16_t _char_control_handle;
 //static uint16_t _char_data_handle;
 
+static sl_sleeptimer_timer_handle_t button_debounce_timers[NBUTTONS];
 static sl_sleeptimer_timer_handle_t relay_timers[NRELAYS];
 static uint32_t relay_delay_ticks = 0;
-#define RELAY_DLAY_MSEC 10
+static uint32_t button_delay_ticks = 0;
+#define RELAY_DLAY_MSEC 20
+#define BUTTON_DLAY_MSEC 150
+
+static void relay_toggle(int idx);
 
 static void relay_timer_callback (sl_sleeptimer_timer_handle_t *handle,
                                             void *data)
@@ -79,17 +94,64 @@ static void relay_timer_callback (sl_sleeptimer_timer_handle_t *handle,
   int relay_idx = (int)data;
   int pin , port;
   channel_to_port_and_pin(relay_idx, PIN_UNSET, &port, &pin);
-
   GPIO_PinOutClear(port,pin);
-  printf("CLEAR PIN %d %d\r\n\n", port, pin);
   channel_to_port_and_pin(relay_idx, PIN_SET, &port, &pin);
-
   GPIO_PinOutClear(port,pin);
-  printf("CLEAR PIN %d %d\r\n\n", port, pin);
+  relay_changing[relay_idx]=0;
 }
+
+static void button_debounce_timer (sl_sleeptimer_timer_handle_t *handle,
+                                            void *data)
+{
+  int button_idx = (int)data;
+  button_debounce_state[button_idx]=0;
+}
+
+
 /**************************************************************************//**
  * Application Init.
  *****************************************************************************/
+static void button_change(uint8_t idx)
+{
+  int port, pin;
+     button_to_port_and_pin(idx, &port, &pin);
+     int state = GPIO_PinInGet(port, pin);
+     if (state==0) {
+         //debounce it
+         if (button_debounce_state[idx]==1) {
+             return;
+         }
+         button_debounce_state[idx]=1;
+         sl_sleeptimer_start_timer(button_debounce_timers+idx,
+                                   button_delay_ticks,
+                                   button_debounce_timer,
+                                   idx,
+                                   0,
+                                   0);
+         switch(idx) {
+           case 0:
+             relay_toggle(0);
+             break;
+           case 1:
+             relay_toggle(1);
+             break;
+           case 2:
+             relay_toggle(2);
+             break;
+           case 3:
+             if (_char_handle>0) {
+                     uint8_t toggle[4] = { 0x00, 0x00, 0x02, 0x00 };
+                     //int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,4,toggle);
+
+                 //printf("TOGGLE IS %d\r\n\n",sc);
+             }
+             break;
+           default:
+             break;
+         }
+  }
+}
+
 SL_WEAK void app_init(void)
 {
 #if TYPE == T_RELAY
@@ -100,13 +162,24 @@ SL_WEAK void app_init(void)
   GPIO_PinModeSet(gpioPortB,0,  gpioModeWiredAndPullUp,0);
   GPIO_PinModeSet(gpioPortB,1,  gpioModeWiredAndPullUp,0);*/
 
+  int pin, port;
+  for (int idx=0; idx<NRELAYS; idx++) {
+      channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
+      GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
+      channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
+      GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
+  }
 
-  GPIO_PinModeSet(gpioPortA,7,  gpioModePushPull,0);
-  GPIO_PinModeSet(gpioPortA,8,  gpioModePushPull,0);
-  GPIO_PinModeSet(gpioPortC,6,  gpioModePushPull,0);
-  GPIO_PinModeSet(gpioPortC,7,  gpioModePushPull,0);
-  GPIO_PinModeSet(gpioPortB,0,  gpioModePushPull,0);
-  GPIO_PinModeSet(gpioPortB,1,  gpioModePushPull,0);
+  CMU_ClockEnable(cmuClock_GPIO, true);
+  GPIOINT_Init();
+
+  for (int idx=0; idx<NBUTTONS; idx++) {
+      button_to_port_and_pin(idx, &port, &pin);
+      printf("SETTING pin %d port %d\r\n\n",pin,port);
+      GPIO_PinModeSet(port,pin,gpioModeInput,1);
+      GPIOINT_CallbackRegister(idx, (GPIOINT_IrqCallbackPtr_t)button_change);
+      GPIO_ExtIntConfig(port,pin,idx,false,true,true);
+  }
 
   ///sl_ads_init(&ads1115_sensor);
   sl_ina3221_init(&ina3221_sensor,INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
@@ -114,15 +187,51 @@ SL_WEAK void app_init(void)
 #endif
   sl_sleeptimer_init();
   relay_delay_ticks = ((uint64_t)RELAY_DLAY_MSEC * sl_sleeptimer_get_timer_frequency()) / 1000;
+  button_delay_ticks = ((uint64_t)BUTTON_DLAY_MSEC * sl_sleeptimer_get_timer_frequency()) / 1000;
 }
+
+
+
 
 /**************************************************************************//**
  * Application Process Action.
  *****************************************************************************/
 
+void button_to_port_and_pin(int button, int * port, int * pin) {
+  switch(button) {
+    case 0:
+      *port=gpioPortC;
+      *pin=0;
+      break;
+    case 1:
+      *port=gpioPortC;
+      *pin=1;
+      break;
+    case 2:
+      *port=gpioPortC;
+      *pin=2;
+      break;
+    case 3:
+      *port=gpioPortB;
+      *pin=1;
+      break;
+    default:
+      sl_app_assert(1==0, "[E: 0x%04x] Invalid button\n", button);
+  }
+
+}
 void channel_to_port_and_pin(int channel, int pin_type, int * port, int * pin) {
   switch(channel) {
     case 0:
+      if (pin_type==PIN_SET) {
+        *port=gpioPortC;
+        *pin=7;
+      } else {
+         *port=gpioPortC;
+         *pin=6;
+      }
+      break;
+    case 1:
       if (pin_type==PIN_SET) {
         *port=gpioPortA;
         *pin=7;
@@ -131,22 +240,13 @@ void channel_to_port_and_pin(int channel, int pin_type, int * port, int * pin) {
          *pin=8;
       }
       break;
-    case 1:
-      if (pin_type==PIN_SET) {
-        *port=gpioPortC;
-        *pin=6;
-      } else {
-         *port=gpioPortC;
-         *pin=7;
-      }
-      break;
     case 2:
       if (pin_type==PIN_SET) {
-        *port=gpioPortB;
-        *pin=0;
+        *port=gpioPortA;
+        *pin=5;
       } else {
-         *port=gpioPortB;
-         *pin=1;
+         *port=gpioPortA;
+         *pin=6;
       }
       break;
     default:
@@ -304,57 +404,68 @@ static void aio_analog_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *da
 }
 
 
+static void relay_off(int idx) {
+  CORE_DECLARE_IRQ_STATE;
+  CORE_ENTER_ATOMIC();
+  if (relay_changing[idx]==1) {
+      CORE_EXIT_ATOMIC();
+      return;
+  }
+  relay_changing[idx]=1;
+  CORE_EXIT_ATOMIC();
+  int port=0;
+  int pin=0;
+  channel_to_port_and_pin(idx,PIN_UNSET,&port,&pin);
+  GPIO_PinOutSet(port,pin);
+  sl_sleeptimer_start_timer(relay_timers+idx,
+                            relay_delay_ticks,
+                            relay_timer_callback,
+                            idx,
+                            0,
+                            0);
+  relay_state[idx]=0;
+}
+static void relay_on(int idx) {
+  CORE_DECLARE_IRQ_STATE;
+  CORE_ENTER_ATOMIC();
+  if (relay_changing[idx]==1) {
+      CORE_EXIT_ATOMIC();
+      return;
+  }
+  relay_changing[idx]=1;
+  CORE_EXIT_ATOMIC();
+  int port=0;
+  int pin=0;
+  channel_to_port_and_pin(idx,PIN_SET,&port,&pin);
+  GPIO_PinOutSet(port,pin);
+  sl_sleeptimer_start_timer(relay_timers+idx,
+                            relay_delay_ticks,
+                            relay_timer_callback,
+                            idx,
+                            0,
+                            0);
+  relay_state[idx]=1;
+}
+static void relay_toggle(int idx) {
+  if (relay_state[idx]==1) {
+      relay_off(idx);
+  } else {
+      relay_on(idx);
+  }
+}
+
 static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_request_t *data) {
   sl_status_t sc;
   uint8_t att_errorcode = 0;
   //printf("WTIING\r\n\n");
   for (int i=0; i<data->value.len; i++) {
-      int port=0;
-      int pin=0;
 
         if (data->value.data[i]==RELAY_OFF) {
-            channel_to_port_and_pin(i,PIN_UNSET,&port,&pin);
-            GPIO_PinOutSet(port,pin);
-            printf("SET UNSET PIN %d %d\r\n\n",port,pin);
-            sl_sleeptimer_start_timer(relay_timers+i,
-                                      relay_delay_ticks,
-                                      relay_timer_callback,
-                                      i,
-                                      0,
-                                      0);
+            relay_off(i);
         } else if (data->value.data[i]==RELAY_ON) {
-            channel_to_port_and_pin(i,PIN_SET,&port,&pin);
-            GPIO_PinOutSet(port,pin);
-            printf("SET SET PIN %d %d\r\n\n",port,pin);
-            sl_sleeptimer_start_timer(relay_timers+i,
-                                      relay_delay_ticks,
-                                      relay_timer_callback,
-                                      i,
-                                      0,
-                                      0);
+            relay_on(i);
         } else if (data->value.data[i]==RELAY_TOGGLE) { //TOGGLE IT
-            if (relay_state[i]==1) {
-                channel_to_port_and_pin(i,PIN_UNSET,&port,&pin);
-                GPIO_PinOutSet(port,pin);
-                printf("SET UNSET PIN %d %d\r\n\n",port,pin);
-                sl_sleeptimer_start_timer(relay_timers+i,
-                                          relay_delay_ticks,
-                                          relay_timer_callback,
-                                          i,
-                                          0,
-                                          0);
-            } else {
-                channel_to_port_and_pin(i,PIN_SET,&port,&pin);
-                GPIO_PinOutSet(port,pin);
-
-                printf("SET SET PIN %d %d\r\n\n",port,pin);
-                sl_sleeptimer_start_timer(relay_timers+i,
-                                          relay_delay_ticks,
-                                          relay_timer_callback,
-                                          i,
-                                          0,
-                                          0);
-            }
+            relay_toggle(i);
         } else if (data->value.data[i]==RELAY_IGNORE) { //IGNORE IT
             //GPIO_PinOutSet(port,pin);
         } else {
@@ -447,21 +558,32 @@ static int process_scan_response( sl_bt_evt_scanner_scan_report_t *response) {
 }
 
 
-void sl_button_on_change(const sl_button_t *handle)
+/*void sl_button_on_change(const sl_button_t *handle)
 {
   (void)handle;
 #ifdef SL_CATALOG_GATT_SERVICE_AIO_PRESENT
   //sl_gatt_service_aio_on_change();
 #endif // SL_CATALOG_GATT_SERVICE_AIO_PRESENT
+  if (sl_button_get_state(handle)==1) {
+    if (handle==&sl_button_relaybutton0) {
+        relay_toggle(0);
+    }
+    if (handle==&sl_button_relaybutton1) {
+        relay_toggle(1);
+    }
+    if (handle==&sl_button_relaybutton2) {
+        relay_toggle(2);
+    }
+  }
   if (_char_handle>0) {
       if (sl_button_get_state(handle)==1 ) {
           uint8_t toggle[4] = { 0x00, 0x00, 0x02, 0x00 };
-          int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,4,toggle);
+          //int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,4,toggle);
       }
       //printf("TOGGLE IS %d\r\n\n",sc);
   }
 
-}
+}*/
 
 
 //static uint8_t _conn_handle = 0xFF;

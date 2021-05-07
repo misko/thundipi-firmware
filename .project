@@ -406,26 +406,6 @@
 			<locationURI>STUDIO_SDK_LOC/platform/common/toolchain/src/sl_memory.c</locationURI>
 		</link>
 		<link>
-			<name>gecko_sdk_3.1.1/platform/driver/button/inc/sl_button.h</name>
-			<type>1</type>
-			<locationURI>STUDIO_SDK_LOC/platform/driver/button/inc/sl_button.h</locationURI>
-		</link>
-		<link>
-			<name>gecko_sdk_3.1.1/platform/driver/button/inc/sl_simple_button.h</name>
-			<type>1</type>
-			<locationURI>STUDIO_SDK_LOC/platform/driver/button/inc/sl_simple_button.h</locationURI>
-		</link>
-		<link>
-			<name>gecko_sdk_3.1.1/platform/driver/button/src/sl_button.c</name>
-			<type>1</type>
-			<locationURI>STUDIO_SDK_LOC/platform/driver/button/src/sl_button.c</locationURI>
-		</link>
-		<link>
-			<name>gecko_sdk_3.1.1/platform/driver/button/src/sl_simple_button.c</name>
-			<type>1</type>
-			<locationURI>STUDIO_SDK_LOC/platform/driver/button/src/sl_simple_button.c</locationURI>
-		</link>
-		<link>
 			<name>gecko_sdk_3.1.1/platform/driver/debug/inc/sl_debug_swo.h</name>
 			<type>1</type>
 			<locationURI>STUDIO_SDK_LOC/platform/driver/debug/inc/sl_debug_swo.h</locationURI>
@@ -504,6 +484,11 @@
 			<name>gecko_sdk_3.1.1/platform/emdrv/nvm3/src/nvm3_lock.c</name>
 			<type>1</type>
 			<locationURI>STUDIO_SDK_LOC/platform/emdrv/nvm3/src/nvm3_lock.c</locationURI>
+		</link>
+		<link>
+			<name>gecko_sdk_3.1.1/platform/emlib/init/gpio_simple/sl_emlib_gpio_simple_init.h</name>
+			<type>1</type>
+			<locationURI>STUDIO_SDK_LOC/platform/emlib/init/gpio_simple/sl_emlib_gpio_simple_init.h</locationURI>
 		</link>
 		<link>
 			<name>gecko_sdk_3.1.1/platform/radio/rail_lib/common/rail.h</name>
