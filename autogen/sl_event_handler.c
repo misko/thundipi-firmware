@@ -15,7 +15,6 @@
 #include "sl_sleeptimer.h"
 #include "sl_bluetooth.h"
 #include "sl_debug_swo.h"
-#include "sl_emlib_gpio_simple_init.h"
 #include "sl_i2cspm_instances.h"
 #include "sl_iostream_init_instances.h"
 #include "sl_iostream_swo.h"

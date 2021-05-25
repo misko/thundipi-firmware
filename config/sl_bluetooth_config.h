@@ -6,9 +6,9 @@
 // <h> Bluetooth Stack Configuration
 
 // <o SL_BT_CONFIG_MAX_CONNECTIONS> Max number of connections <0-32>
-// <i> Default: 4
+// <i> Default: 16
 // <i> Define the number of connections the application needs.
-#define SL_BT_CONFIG_MAX_CONNECTIONS     (4)
+#define SL_BT_CONFIG_MAX_CONNECTIONS     (16)
 
 // <o SL_BT_CONFIG_USER_ADVERTISERS> Max number of advertisers reserved for user <0-8>
 // <i> Default: 1

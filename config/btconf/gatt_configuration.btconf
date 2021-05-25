@@ -60,6 +60,7 @@
       <properties>
         <read authenticated="false" bonded="true" encrypted="false"/>
         <write authenticated="false" bonded="true" encrypted="false"/>
+        <notify authenticated="false" bonded="false" encrypted="false"/>
       </properties>
     </characteristic>
     
@@ -69,6 +70,7 @@
       <value length="0" type="user" variable_length="false"/>
       <properties>
         <read authenticated="false" bonded="true" encrypted="false"/>
+        <notify authenticated="true" bonded="false" encrypted="false"/>
       </properties>
     </characteristic>
   </service>

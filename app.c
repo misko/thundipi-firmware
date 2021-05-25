@@ -35,6 +35,12 @@
 //#include "em_int.h"
 #include "em_gpio.h"
 #include "gpiointerrupt.h"
+struct {
+    bd_addr device_address;
+    uint8_t address_type;
+    uint8_t connection_handle;
+} connections[8];
+uint8_t live_connections = 0;
 
 enum RELAY_STATE {
   RELAY_OFF = 0,
@@ -51,11 +57,15 @@ enum APP_STATE {
   SWITCH_GET_CHAR
 };
 
+#define SIGNAL_AMP_NOTIFY 0x1
+#define SIGNAL_RELAY_NOTIFY 0x2
+#define SIGNAL_SWITCH_TOGGLE 0x4
+
 #define NRELAYS 3
 #define NBUTTONS 4
 #define T_RELAY 0
 #define T_SWITCH 1
-#define TYPE 0
+#define TYPE 1
 
 #define PIN_SET 0
 #define PIN_UNSET 1
@@ -81,10 +91,13 @@ static uint8_t _conn_handle=0;
 
 static sl_sleeptimer_timer_handle_t button_debounce_timers[NBUTTONS];
 static sl_sleeptimer_timer_handle_t relay_timers[NRELAYS];
+static sl_sleeptimer_timer_handle_t amp_notify_timer;
 static uint32_t relay_delay_ticks = 0;
 static uint32_t button_delay_ticks = 0;
+static uint32_t amp_delay_ticks = 0;
 #define RELAY_DLAY_MSEC 20
 #define BUTTON_DLAY_MSEC 150
+#define AMP_DLAY_MSEC 1000
 
 static void relay_toggle(int idx);
 
@@ -100,13 +113,19 @@ static void relay_timer_callback (sl_sleeptimer_timer_handle_t *handle,
   relay_changing[relay_idx]=0;
 }
 
-static void button_debounce_timer (sl_sleeptimer_timer_handle_t *handle,
+static void button_debounce_timer_callback (sl_sleeptimer_timer_handle_t *handle,
                                             void *data)
 {
   int button_idx = (int)data;
   button_debounce_state[button_idx]=0;
 }
 
+static void amp_notify_timer_callback (sl_sleeptimer_timer_handle_t *handle,
+                                            void *data)
+{
+  //TODO optimize to only if current changes
+  sl_bt_external_signal(SIGNAL_AMP_NOTIFY);
+}
 
 /**************************************************************************//**
  * Application Init.
@@ -124,7 +143,7 @@ static void button_change(uint8_t idx)
          button_debounce_state[idx]=1;
          sl_sleeptimer_start_timer(button_debounce_timers+idx,
                                    button_delay_ticks,
-                                   button_debounce_timer,
+                                   button_debounce_timer_callback,
                                    idx,
                                    0,
                                    0);
@@ -139,12 +158,9 @@ static void button_change(uint8_t idx)
              relay_toggle(2);
              break;
            case 3:
-             if (_char_handle>0) {
-                     uint8_t toggle[4] = { 0x00, 0x00, 0x02, 0x00 };
-                     //int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,4,toggle);
 
-                 //printf("TOGGLE IS %d\r\n\n",sc);
-             }
+             sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
+
              break;
            default:
              break;
@@ -154,21 +170,23 @@ static void button_change(uint8_t idx)
 
 SL_WEAK void app_init(void)
 {
-#if TYPE == T_RELAY
-  /*GPIO_PinModeSet(gpioPortA,7,  gpioModeWiredAndPullUp,0);
-  GPIO_PinModeSet(gpioPortA,8,  gpioModeWiredAndPullUp,0);
-  GPIO_PinModeSet(gpioPortC,6,  gpioModeWiredAndPullUp,0);
-  GPIO_PinModeSet(gpioPortC,7,  gpioModeWiredAndPullUp,0);
-  GPIO_PinModeSet(gpioPortB,0,  gpioModeWiredAndPullUp,0);
-  GPIO_PinModeSet(gpioPortB,1,  gpioModeWiredAndPullUp,0);*/
-
   int pin, port;
+#if TYPE == T_RELAY
+
   for (int idx=0; idx<NRELAYS; idx++) {
       channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
       GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
       channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
       GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
   }
+
+
+  ///sl_ads_init(&ads1115_sensor);
+  sl_ina3221_init(&ina3221_sensor,INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
+
+
+#elif TYPE == T_SWITCH
+#endif
 
   CMU_ClockEnable(cmuClock_GPIO, true);
   GPIOINT_Init();
@@ -180,14 +198,20 @@ SL_WEAK void app_init(void)
       GPIOINT_CallbackRegister(idx, (GPIOINT_IrqCallbackPtr_t)button_change);
       GPIO_ExtIntConfig(port,pin,idx,false,true,true);
   }
-
-  ///sl_ads_init(&ads1115_sensor);
-  sl_ina3221_init(&ina3221_sensor,INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
-#elif TYPE == T_SWITCH
-#endif
   sl_sleeptimer_init();
   relay_delay_ticks = ((uint64_t)RELAY_DLAY_MSEC * sl_sleeptimer_get_timer_frequency()) / 1000;
   button_delay_ticks = ((uint64_t)BUTTON_DLAY_MSEC * sl_sleeptimer_get_timer_frequency()) / 1000;
+  amp_delay_ticks = ((uint64_t)AMP_DLAY_MSEC * sl_sleeptimer_get_timer_frequency()) / 1000;
+
+#if TYPE == T_RELAY
+  sl_status_t sc= sl_sleeptimer_start_periodic_timer ( &amp_notify_timer,
+                                                       amp_delay_ticks,
+                                                       amp_notify_timer_callback,
+  NULL,
+  0,
+  0
+  );
+#endif
 }
 
 
@@ -424,6 +448,8 @@ static void relay_off(int idx) {
                             0,
                             0);
   relay_state[idx]=0;
+
+  sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
 }
 static void relay_on(int idx) {
   CORE_DECLARE_IRQ_STATE;
@@ -445,6 +471,9 @@ static void relay_on(int idx) {
                             0,
                             0);
   relay_state[idx]=1;
+
+
+  sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
 }
 static void relay_toggle(int idx) {
   if (relay_state[idx]==1) {
@@ -478,6 +507,9 @@ static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_reques
   sl_app_assert(sc == SL_STATUS_OK,
                 "[E: 0x%04x] Failed to send user write response\n",
                 (int)sc);
+
+
+
 }
 
 static void aio_digital_out_write_cb(sl_bt_evt_gatt_server_user_write_request_t *data,int port, int pin)
@@ -590,19 +622,27 @@ static int process_scan_response( sl_bt_evt_scanner_scan_report_t *response) {
 static uint8_t _bonding_handle = 0xFF;
 void sl_bt_aio_process(sl_bt_msg_t *evt) {
   // Handle stack events
-  //printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
+  // printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
   switch (SL_BT_MSG_ID(evt->header)) {
     case sl_bt_evt_system_boot_id:
       aio_system_boot_cb();
+
+/*#if TYPE==T_SWITCH
+      uint8_t switch_name[]={ 0x74,0x68,0x75,0x6E,0x64,0x69,0x73,0x77,0x69,0x74,0x63,0x68};
+      uint16_t result = sl_bt_gatt_server_write_attribute_value(gattdb_device_name,0,sizeof(switch_name),switch_name);
+#endif*/
       //sl_bt_sm_delete_bondings();
       sl_bt_sm_store_bonding_configuration(8, 2);
       sl_bt_sm_set_passkey(0);
       sl_bt_sm_configure(0x0B, sm_io_capability_displayyesno); //sm_io_capability_displayonly); //0x0F, sm_io_capability_displayyesno);// );
-      sl_bt_sm_set_bondable_mode(1);
+
+
 #if TYPE == T_RELAY
+      sl_bt_sm_set_bondable_mode(1);
       printf("RELAY sl_bt_evt_system_boot_id\r\n\n");
       app_state=RELAY_SERVE;
 #elif TYPE == T_SWITCH
+      sl_bt_sm_set_bondable_mode(0); //TODO SHOULD THIS BE A 1?
       printf("SWITCH sl_bt_evt_system_boot_id\r\n\n");
       sl_bt_scanner_start(1, scanner_discover_generic);
       app_state=SWITCH_CONNECT;
@@ -776,48 +816,35 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         printf("Already Bonded (ID: %d)\r\n",  evt->data.evt_connection_opened.bonding);
       }
       printf("Connection open\n");
+      connections[live_connections].device_address = evt->data.evt_connection_opened.address;
+      connections[live_connections].address_type = evt->data.evt_connection_opened.address_type;
+      connections[live_connections].connection_handle = evt->data.evt_connection_opened.connection;
+      live_connections++;
       break;
 
     case sl_bt_evt_connection_closed_id:
       aio_connection_closed_cb(&evt->data.evt_connection_closed);
       printf("Connection closed\n");
+      int i=0;
+      for (; i<live_connections; i++) {
+          //compare address!
+          if (memcmp(connections[i].device_address.addr,evt->data.evt_connection_opened.address.addr,6)==0) {
+              printf("FOUND CONNETION TO REMOVE\r\n\n");
+              break;
+          }
+      }
+      if (i==live_connections) {
+          printf("FAILE TO FIND THE ONE TO REMOVE...\r\n\n");
+      }
+      for (int j=i+1; j<live_connections; j++) {
+          connections[j-1]=connections[j];
+      }
+      live_connections--;
       break;
 
     case sl_bt_evt_gatt_server_user_read_request_id:
       //printf("sl_bt_evt_gatt_server_user_read_request_id\r\n\n");
       switch (evt->data.evt_gatt_server_user_read_request.characteristic) {
-        /*case gattdb_digitalA:
-          printf("Reading from A\r\n\n");
-          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortA,7);
-          break;
-        case gattdb_digitalB:
-          printf("Reading from B\r\n\n");
-          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortA,8);
-          break;
-        case gattdb_digitalC:
-          printf("Reading from C\r\n\n");
-          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortC,6);
-          break;
-        case gattdb_digitalD:
-          printf("Reading from D\r\n\n");
-          aio_digital_out_read_cb(&evt->data.evt_gatt_server_user_read_request,gpioPortC,7);
-          break;
-        case gattdb_analogA:
-          printf("Reading from AA\r\n\n");
-          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,0);
-          break;
-        case gattdb_analogB:
-          printf("Reading from AA\r\n\n");
-          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,1);
-          break;
-        case gattdb_analogC:
-          printf("Reading from AA\r\n\n");
-          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,2);
-          break;
-        case gattdb_analogD:
-          printf("Reading from AA\r\n\n");
-          aio_analog_out_read_cb(&evt->data.evt_gatt_server_user_read_request,3);
-          break;*/
         case gattdb_switch:
           //printf("Reading from switch\r\n\n");
           aio_digital_out_read_cb_all(&evt->data.evt_gatt_server_user_read_request);
@@ -857,11 +884,55 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
           break;*/
         case gattdb_switch:
           aio_digital_out_write_cb_all(&evt->data.evt_gatt_server_user_write_request);
+
           break;
         default:
           printf("WRITE TO WTF\r\n\n");
           break;
       }
+      case sl_bt_evt_system_external_signal_id:
+        if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
+            sl_status_t sc;
+            double s[NRELAYS];
+            s[0]=INA3221_getCurrentA(&ina3221_sensor,  1);
+            s[1]=INA3221_getCurrentA(&ina3221_sensor,  2);
+            s[2]=INA3221_getCurrentA(&ina3221_sensor,  3);
+            printf("CURRENTS %0.6f %0.6f %0.6f\r\n\n",s[0],s[1],s[2]);
+
+            for (int i=0; i<live_connections; i++) {
+              sc = sl_bt_gatt_server_send_characteristic_notification(
+                //0xFF,
+                  connections[i].connection_handle,
+                gattdb_amps,
+                sizeof(double)*NRELAYS,
+                &s,
+                NULL);
+              //sl_app_assert(sc == SL_STATUS_OK,
+              //              "[E: 0x%04x] Failed to send user notify\n",
+              //              (int)sc);
+            }
+        } else if (evt->data.evt_system_external_signal.extsignals & SIGNAL_RELAY_NOTIFY) {
+            for (int i=0; i<live_connections; i++) {
+            sl_status_t sc = sl_bt_gatt_server_send_characteristic_notification(
+                //0xFF,
+                  connections[i].connection_handle,
+              gattdb_switch,
+              NRELAYS,
+              &relay_state,
+              NULL);
+            /*sl_app_assert(sc == SL_STATUS_OK,
+                          "[E: 0x%04x] Failed to send user notify\n",
+                          (int)sc);*/
+            }
+        } else if (evt->data.evt_system_external_signal.extsignals & SIGNAL_SWITCH_TOGGLE) {
+            if (_char_handle>0) {
+              uint8_t toggle[NRELAYS] = { 0x03, 0x03, 0x02 };
+              int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,NRELAYS,toggle);
+
+            }
+        //printf("TOGGLE IS %d\r\n\n",sc);
+        }
+        break;
       break;
   }
 }
@@ -890,7 +961,10 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       sl_app_assert(sc == SL_STATUS_OK,
                     "[E: 0x%04x] Failed to get Bluetooth address\n",
                     (int)sc);
-
+#if TYPE==T_SWITCH
+      uint8_t switch_name[]={ 0x74,0x68,0x75,0x6E,0x64,0x69,0x73,0x77,0x69,0x74,0x63,0x68};
+      uint16_t result = sl_bt_gatt_server_write_attribute_value(gattdb_device_name,0,sizeof(switch_name),switch_name);
+#endif
       // Pad and reverse unique ID to get System ID.
       system_id[0] = address.addr[5];
       system_id[1] = address.addr[4];
@@ -914,7 +988,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       sl_app_assert(sc == SL_STATUS_OK,
                     "[E: 0x%04x] Failed to create advertising set\n",
                     (int)sc);
-
+#if TYPE==T_RELAY
       // Set advertising interval to 100ms.
       sc = sl_bt_advertiser_set_timing(
         advertising_set_handle,
@@ -933,6 +1007,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       sl_app_assert(sc == SL_STATUS_OK,
                     "[E: 0x%04x] Failed to start advertising\n",
                     (int)sc);
+#endif
       break;
 
     // -------------------------------
@@ -943,7 +1018,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
         advertiser_general_discoverable,
         advertiser_connectable_scannable);
       sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to start advertising\n",
+                    "[E: 0x%04x] Failed to restart advertising 1\n",
                     (int)sc); // restart advertising right after?
       break;
 
@@ -956,7 +1031,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
         advertiser_general_discoverable,
         advertiser_connectable_scannable);
       sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to start advertising\n",
+                    "[E: 0x%04x] Failed to restart advertising 2\n",
                     (int)sc);
       break;
 

@@ -27,7 +27,6 @@ component:
 - instance: [INA3221, ads1115, sensor]
   id: i2cspm
 - {id: printf}
-- {id: emlib_gpio_simple_init_common}
 - {id: component_catalog}
 - {id: ota_dfu}
 - {id: brd4184a}

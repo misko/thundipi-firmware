@@ -16,8 +16,8 @@ extern const struct bg_gattdb_def bg_gattdb_data;
 #define gattdb_manufacturer_name_string       16
 #define gattdb_system_id                      18
 #define gattdb_switch                         21
-#define gattdb_amps                           23
-#define gattdb_ota_control                    26
+#define gattdb_amps                           24
+#define gattdb_ota_control                    28
 
 
 #endif // __GATT_DB_H
