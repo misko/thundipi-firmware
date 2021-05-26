@@ -14,7 +14,6 @@
  * sections of the MSLA applicable to Source Code.
  *
  ******************************************************************************/
-#include <ads1115.h>
 #include <INA3221.h>
 #include "em_common.h"
 #include "em_gpio.h"
@@ -22,7 +21,6 @@
 #include "sl_app_assert.h"
 #include "sl_bluetooth.h"
 #include "sl_i2cspm.h"
-#include "ads1115.h"
 #include "gatt_db.h"
 #include "app.h"
 #include "em_i2c.h"
@@ -32,9 +30,12 @@
 #include "gpiointerrupt.h"
 #include "em_cmu.h"
 #include "em_gpio.h"
+#include "pin_config.h"
 //#include "em_int.h"
 #include "em_gpio.h"
 #include "gpiointerrupt.h"
+
+#define PI_DEBUG 1
 struct {
     bd_addr device_address;
     uint8_t address_type;
@@ -62,10 +63,10 @@ enum APP_STATE {
 #define SIGNAL_SWITCH_TOGGLE 0x4
 
 #define NRELAYS 3
-#define NBUTTONS 4
+#define NBUTTONS 1
 #define T_RELAY 0
 #define T_SWITCH 1
-#define TYPE 1
+#define TYPE 0
 
 #define PIN_SET 0
 #define PIN_UNSET 1
@@ -80,7 +81,7 @@ static int app_state = IDLE;
 
 // The advertising set handle allocated from Bluetooth stack.
 static uint8_t advertising_set_handle = 0xff;
-static struct I2C_ADS1115 ads1115_sensor;
+//static struct I2C_ADS1115 ads1115_sensor;
 static struct I2C_INA3221 ina3221_sensor;
 
 static uint32_t _service_handle=0;
@@ -147,6 +148,8 @@ static void button_change(uint8_t idx)
                                    idx,
                                    0,
                                    0);
+
+#if TYPE == T_RELAY
          switch(idx) {
            case 0:
              relay_toggle(0);
@@ -165,6 +168,9 @@ static void button_change(uint8_t idx)
            default:
              break;
          }
+#else
+         sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
+#endif
   }
 }
 
@@ -193,7 +199,7 @@ SL_WEAK void app_init(void)
 
   for (int idx=0; idx<NBUTTONS; idx++) {
       button_to_port_and_pin(idx, &port, &pin);
-      printf("SETTING pin %d port %d\r\n\n",pin,port);
+      //printf("SETTING pin %d port %d\r\n\n",pin,port);
       GPIO_PinModeSet(port,pin,gpioModeInput,1);
       GPIOINT_CallbackRegister(idx, (GPIOINT_IrqCallbackPtr_t)button_change);
       GPIO_ExtIntConfig(port,pin,idx,false,true,true);
@@ -224,10 +230,10 @@ SL_WEAK void app_init(void)
 void button_to_port_and_pin(int button, int * port, int * pin) {
   switch(button) {
     case 0:
-      *port=gpioPortC;
-      *pin=0;
+      *port=BUTTON1_PORT;
+      *pin=BUTTON1_PIN;
       break;
-    case 1:
+    /*case 1:
       *port=gpioPortC;
       *pin=1;
       break;
@@ -238,7 +244,7 @@ void button_to_port_and_pin(int button, int * port, int * pin) {
     case 3:
       *port=gpioPortB;
       *pin=1;
-      break;
+      break;*/
     default:
       sl_app_assert(1==0, "[E: 0x%04x] Invalid button\n", button);
   }
@@ -248,96 +254,46 @@ void channel_to_port_and_pin(int channel, int pin_type, int * port, int * pin) {
   switch(channel) {
     case 0:
       if (pin_type==PIN_SET) {
-        *port=gpioPortC;
-        *pin=7;
+        *port=RELAY1_SET_PORT;
+        *pin=RELAY1_SET_PIN;
       } else {
-         *port=gpioPortC;
-         *pin=6;
+          *port=RELAY1_UNSET_PORT;
+          *pin=RELAY1_UNSET_PIN;
       }
       break;
     case 1:
       if (pin_type==PIN_SET) {
-        *port=gpioPortA;
-        *pin=7;
+          *port=RELAY2_SET_PORT;
+          *pin=RELAY2_SET_PIN;
       } else {
-         *port=gpioPortA;
-         *pin=8;
+          *port=RELAY2_UNSET_PORT;
+          *pin=RELAY2_UNSET_PIN;
       }
       break;
     case 2:
       if (pin_type==PIN_SET) {
-        *port=gpioPortA;
-        *pin=5;
+          *port=RELAY3_SET_PORT;
+          *pin=RELAY3_SET_PIN;
       } else {
-         *port=gpioPortA;
-         *pin=6;
+          *port=RELAY3_UNSET_PORT;
+          *pin=RELAY3_UNSET_PIN;
       }
       break;
     default:
       sl_app_assert(1==0, "[E: 0x%04x] Invalid channel\n", channel);
   }
 }
-float read_voltage(int channel) {
-  uint16_t v0 = ads1115_readADC_SingleEnded(&ads1115_sensor, channel);
-  return v0*(4.096/(1<<15));
-}
 
-float read_current(int channel) {
-  float ratio = (2000.0+3300.0)/3300.0;
-  float vout = read_voltage(channel)*ratio;
-  float current = (vout-1.64)/0.044;
-  //printf("VOUT %f , current %f\r\n\n",vout,current);
-  return current;
-}
 SL_WEAK void app_process_action(void)
 {
-  /////////////////////////////////////////////////////////////////////////////
-  // Put your additional application code here!                              //
-  // This is called infinitely.                                              //
-  // Do not call blocking functions from here!                               //
-  /////////////////////////////////////////////////////////////////////////////
-  ///
-  /*uint16_t v0 = ads1115_readADC_SingleEnded(&ads1115_sensor, 0);
-  uint16_t v1 = ads1115_readADC_SingleEnded(&ads1115_sensor, 1);
-  uint16_t v2 = ads1115_readADC_SingleEnded(&ads1115_sensor, 2);
-  uint16_t v3 = ads1115_readADC_SingleEnded(&ads1115_sensor, 3);*/
-  /*float v0 = read_voltage(0);
-  float v1 = read_voltage(1);
-  float v2 = read_voltage(2);
-  float v3 = read_voltage(3);
-  float c0 = read_current(0);
-  printf("%f %f %f %f %f\r\n\n",v0,v1,v2,v3,c0);*/
 
-
-  //INA3221
-  /*for (int channel=1; channel<4; channel++) {
-      double shuntA=INA3221_getCurrentA(&ina3221_sensor,  channel);
-      double busV=INA3221_getBusVoltageV(&ina3221_sensor,  channel);
-      double shuntV=INA3221_getShuntVoltageV(&ina3221_sensor,  channel);
-      printf("%d CHANNEL, Bus %0.4lfV, Shunt %0.8lfV %0.6lfA\r\n\n",channel, busV , shuntV, shuntA );
-  }*/
 }
 
 static void aio_system_boot_cb(void)
 {
-  sl_status_t sc;
-  uint8_t value_out = 1;
-  /*sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsA, 0, 1, &value_out);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to write attribute value\n",
-                (int)sc);
-  sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsB, 0, 1, &value_out);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to write attribute value\n",
-                (int)sc);
-  sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsC, 0, 1, &value_out);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to write attribute value\n",
-                (int)sc);
-  sc = sl_bt_gatt_server_write_attribute_value(gattdb_number_of_digitalsD, 0, 1, &value_out);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to write attribute value\n",
-                (int)sc);*/
+  //sl_status_t sc;
+  //uint8_t value_out = 1;
+
 }
 
 
@@ -349,25 +305,6 @@ static void aio_connection_opened_cb(sl_bt_evt_connection_opened_t *data)
 static void aio_connection_closed_cb(sl_bt_evt_connection_closed_t *data)
 {
   (void)data;
-}
-
-
-
-static void aio_digital_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *data,int port, int pin)
-{
-  sl_status_t sc;
-  uint8_t value =GPIO_PinOutGet(port,pin);
-  //TODO can batch it all into one value
-  sc = sl_bt_gatt_server_send_user_read_response(
-    data->connection,
-    data->characteristic,
-    0,
-    1,
-    &value,
-    NULL);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to send user read response\n",
-                (int)sc);
 }
 
 
@@ -393,10 +330,15 @@ static void aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t
 {
   sl_status_t sc;
   double s[NRELAYS];
+  s[0]=INA3221_getBusVoltageV(&ina3221_sensor,  1);
+  s[1]=INA3221_getBusVoltageV(&ina3221_sensor,  2);
+  s[2]=INA3221_getBusVoltageV(&ina3221_sensor,  3);
+  printf("VOLTAGES %0.6f %0.6f %0.6f\r\n\n",s[0],s[1],s[2]);
   s[0]=INA3221_getCurrentA(&ina3221_sensor,  1);
   s[1]=INA3221_getCurrentA(&ina3221_sensor,  2);
   s[2]=INA3221_getCurrentA(&ina3221_sensor,  3);
   printf("CURRENTS %0.6f %0.6f %0.6f\r\n\n",s[0],s[1],s[2]);
+
 
   sc = sl_bt_gatt_server_send_user_read_response(
     data->connection,
@@ -404,23 +346,6 @@ static void aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t
     0,
     sizeof(double)*NRELAYS,
     &s,
-    NULL);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to send user read response\n",
-                (int)sc);
-}
-
-static void aio_analog_out_read_cb(sl_bt_evt_gatt_server_user_read_request_t *data,int channel)
-{
-  sl_status_t sc;
-  double current = INA3221_getCurrentA(&ina3221_sensor,  channel);
-  //printf("CURRENT ISXX %d\r\n\n",current);
-  sc = sl_bt_gatt_server_send_user_read_response(
-    data->connection,
-    data->characteristic,
-    0,
-    sizeof(double),
-    &current,
     NULL);
   sl_app_assert(sc == SL_STATUS_OK,
                 "[E: 0x%04x] Failed to send user read response\n",
@@ -498,7 +423,7 @@ static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_reques
         } else if (data->value.data[i]==RELAY_IGNORE) { //IGNORE IT
             //GPIO_PinOutSet(port,pin);
         } else {
-            printf("Weird value to write to pin! %d\n",data->value.data[i]);
+            //printf("Weird value to write to pin! %d\n",data->value.data[i]);
         }
   }
   sc = sl_bt_gatt_server_send_user_write_response(data->connection,
@@ -512,31 +437,7 @@ static void aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_reques
 
 }
 
-static void aio_digital_out_write_cb(sl_bt_evt_gatt_server_user_write_request_t *data,int port, int pin)
-{
-  sl_status_t sc;
-  uint8_t att_errorcode = 0;
 
-  if (data->value.len == 1) {
-    if (data->value.data[0]==0) {
-        GPIO_PinOutClear(port,pin);
-    } else if (data->value.data[0]==1) {
-        GPIO_PinOutSet(port,pin);
-    } else {
-        printf("Weird value to write to pin!\n");
-    }
-  } else {
-    printf("Weird value to write to pin 2!\n");
-    att_errorcode = 0x0D; // Invalid Attribute Value Length
-  }
-
-  sc = sl_bt_gatt_server_send_user_write_response(data->connection,
-                                                  data->characteristic,
-                                                  att_errorcode);
-  sl_app_assert(sc == SL_STATUS_OK,
-                "[E: 0x%04x] Failed to send user write response\n",
-                (int)sc);
-}
 
 //ary must be len 18 at least
 void bd_addr_to_char(bd_addr addr, char* ary) {
@@ -590,36 +491,10 @@ static int process_scan_response( sl_bt_evt_scanner_scan_report_t *response) {
 }
 
 
-/*void sl_button_on_change(const sl_button_t *handle)
-{
-  (void)handle;
-#ifdef SL_CATALOG_GATT_SERVICE_AIO_PRESENT
-  //sl_gatt_service_aio_on_change();
-#endif // SL_CATALOG_GATT_SERVICE_AIO_PRESENT
-  if (sl_button_get_state(handle)==1) {
-    if (handle==&sl_button_relaybutton0) {
-        relay_toggle(0);
-    }
-    if (handle==&sl_button_relaybutton1) {
-        relay_toggle(1);
-    }
-    if (handle==&sl_button_relaybutton2) {
-        relay_toggle(2);
-    }
-  }
-  if (_char_handle>0) {
-      if (sl_button_get_state(handle)==1 ) {
-          uint8_t toggle[4] = { 0x00, 0x00, 0x02, 0x00 };
-          //int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,4,toggle);
-      }
-      //printf("TOGGLE IS %d\r\n\n",sc);
-  }
-
-}*/
 
 
 //static uint8_t _conn_handle = 0xFF;
-static uint8_t _bonding_handle = 0xFF;
+//static uint8_t _bonding_handle = 0xFF;
 void sl_bt_aio_process(sl_bt_msg_t *evt) {
   // Handle stack events
   // printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
@@ -635,14 +510,14 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
       sl_bt_sm_store_bonding_configuration(8, 2);
       sl_bt_sm_set_passkey(0);
       sl_bt_sm_configure(0x0B, sm_io_capability_displayyesno); //sm_io_capability_displayonly); //0x0F, sm_io_capability_displayyesno);// );
-
+      sl_bt_sm_set_bondable_mode(1);
 
 #if TYPE == T_RELAY
-      sl_bt_sm_set_bondable_mode(1);
+      //sl_bt_sm_set_bondable_mode(1);
       printf("RELAY sl_bt_evt_system_boot_id\r\n\n");
       app_state=RELAY_SERVE;
 #elif TYPE == T_SWITCH
-      sl_bt_sm_set_bondable_mode(0); //TODO SHOULD THIS BE A 1?
+      //sl_bt_sm_set_bondable_mode(0); //TODO SHOULD THIS BE A 1?
       printf("SWITCH sl_bt_evt_system_boot_id\r\n\n");
       sl_bt_scanner_start(1, scanner_discover_generic);
       app_state=SWITCH_CONNECT;
@@ -671,18 +546,21 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 
     case sl_bt_evt_sm_confirm_bonding_id:
+#ifdef PI_DEBUG
         printf("sl_bt_evt_sm_confirm_bonding_id\r\n\n");
         printf("    Event Parameters:\r\n\n");
         printf("        connection:     0x%02x\r\n\n", evt->data.evt_sm_confirm_bonding.connection);
         printf("        bonding_handle: %02d\r\n\n",   evt->data.evt_sm_confirm_bonding.bonding_handle);
+#endif
        //sl_bt_sm_bonding_confirm(_conn_handle,1);
        sl_bt_sm_bonding_confirm(evt->data.evt_sm_confirm_bonding.connection,1);
-       printf("Return from bonding\r\n\n");
+       //printf("Return from bonding\r\n\n");
 
       break;
 
     case sl_bt_evt_connection_parameters_id:
-        printf("sl_bt_evt_connection_parameters_id\r\n");
+#ifdef PI_DEBUG
+      printf("sl_bt_evt_connection_parameters_id\r\n");
         printf("    Event Parameters:\r\n");
         printf("        connection:    0x%02x\r\n", evt->data.evt_connection_parameters.connection);
         printf("        interval:      0x%04x\r\n", evt->data.evt_connection_parameters.interval);
@@ -690,19 +568,22 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         printf("        timeout:       0x%04x\r\n", evt->data.evt_connection_parameters.timeout);
         printf("        security_mode: %d\r\n",     evt->data.evt_connection_parameters.security_mode);
         printf("        txsize:        0x%04x\r\n", evt->data.evt_connection_parameters.txsize);
-        uint8_t connection_handle = evt->data.evt_connection_parameters.connection;
-        if(evt->data.evt_connection_parameters.security_mode < 2) {
-            sl_bt_sm_increase_security(connection_handle);
-        } else { //security is >=3
-#if TYPE == T_SWITCH
-            if (app_state==SWITCH_CONNECT) {
-                app_state=SWITCH_GET_SERVICE;
-                printf("LETS GET A SERVICE!\r\n");
-                //sl_bt_gatt_discover_primary_services(evt->data.evt_connection_parameters.connection);
-                sl_bt_gatt_discover_primary_services_by_uuid(evt->data.evt_connection_parameters.connection,  2, UUID_SERVICE);
-            }
 #endif
-          //gecko_cmd_hardware_set_soft_timer(0, INCREASE_SEC_TMR_HANDLE, 1); //Clear timer
+        {
+          uint8_t connection_handle = evt->data.evt_connection_parameters.connection;
+          if(evt->data.evt_connection_parameters.security_mode < 2) {
+              sl_bt_sm_increase_security(connection_handle);
+          } else { //security is >=3
+  #if TYPE == T_SWITCH
+              if (app_state==SWITCH_CONNECT) {
+                  app_state=SWITCH_GET_SERVICE;
+                  printf("LETS GET A SERVICE!\r\n");
+                  //sl_bt_gatt_discover_primary_services(evt->data.evt_connection_parameters.connection);
+                  sl_bt_gatt_discover_primary_services_by_uuid(evt->data.evt_connection_parameters.connection,  2, UUID_SERVICE);
+              }
+  #endif
+            //gecko_cmd_hardware_set_soft_timer(0, INCREASE_SEC_TMR_HANDLE, 1); //Clear timer
+          }
         }
         break;
         //sl_bt_sm_increase_security(_conn_handle); //not sure about this
@@ -731,7 +612,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
       break;
 
     case sl_bt_evt_gatt_procedure_completed_id:
-      printf("COMPLETED GATT PROCED %d\r\n",evt->data.evt_gatt_procedure_completed.result);
+      //printf("COMPLETED GATT PROCED %d\r\n",evt->data.evt_gatt_procedure_completed.result);
       if (_service_handle!=0 && app_state==SWITCH_GET_SERVICE) {
           app_state=SWITCH_GET_CHAR;
           sl_bt_gatt_discover_characteristics_by_uuid(evt->data.evt_gatt_procedure_completed.connection, _service_handle, 2, UUID_RELAY_CHAR);
@@ -740,6 +621,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 
 
+#ifdef PI_DEBUG
     case sl_bt_evt_connection_phy_status_id:
         printf("sl_bt_evt_connection_phy_status_id\r\n\n");
         printf("    Event Parameters:\r\n\n");
@@ -761,7 +643,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
     case sl_bt_evt_sm_passkey_display_id:
       printf("Passkey: %06lu", evt->data.evt_sm_passkey_display.passkey);
       break;
-
+#endif
     // Event raised by the security manager when a passkey needs to be confirmed
     case sl_bt_evt_sm_confirm_passkey_id:
       printf("Do you see this passkey on the other device: %06lu? (y/n)\r\n\n", evt->data.evt_sm_confirm_passkey.passkey);
@@ -771,8 +653,8 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
       // Event raised when bonding is successful
       case sl_bt_evt_sm_bonded_id:
-        printf("Bonded\r\n\n");
-        printf("--------------------------------------\r\n\n");
+        //printf("Bonded\r\n\n");
+        //printf("--------------------------------------\r\n\n");
         // sl_bt_connection_close(_conn_handle); // not sure if we need this?
         break;
 
@@ -780,16 +662,17 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         //reason codes are here, https://docs.silabs.com/mcu/latest/bgm13/group-sl-status
         //((sl_status_t)0x1006) ->  SL_STATUS_BT_CTRL_PIN_OR_KEY_MISSING   ((sl_status_t)0x1006)
       case sl_bt_evt_sm_bonding_failed_id:
-        printf("Bonding failed\r\n\n");
-        printf("--------------------------------------\r\n\n");
+        //printf("Bonding failed\r\n\n");
+        //printf("--------------------------------------\r\n\n");
         //gecko_cmd_sm_increase_security(_conn_handle);        case sl_bt_evt_sm_bonding_failed_id:
-        printf("sl_bt_evt_sm_bonding_failed_id\r\n\n");
-        printf("    Event Parameters:\r\n");
-        printf("        connection: 0x%02x\r\n", evt->data.evt_sm_bonding_failed.connection);
-        printf("        reason:     0x%04x\r\n\n", evt->data.evt_sm_bonding_failed.reason);
+        //printf("sl_bt_evt_sm_bonding_failed_id\r\n\n");
+        //printf("    Event Parameters:\r\n");
+        //printf("        connection: 0x%02x\r\n", evt->data.evt_sm_bonding_failed.connection);
+        //printf("        reason:     0x%04x\r\n\n", evt->data.evt_sm_bonding_failed.reason);
         break;
 
     case sl_bt_evt_connection_opened_id:
+#ifdef PI_DEBUG
         printf("sl_bt_evt_connection_opened_id\r\n\n");
         printf("    Event Parameters:\r\n");
         printf  ("        address:      %02x\r\n", evt->data.evt_connection_opened.address.addr[0]);
@@ -803,6 +686,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         printf("        connection:   0x%02x\r\n", evt->data.evt_connection_opened.connection);
         printf("        bonding:      0x%02x\r\n", evt->data.evt_connection_opened.bonding);
         printf("        advertiser:   0x%02x\r\n\n", evt->data.evt_connection_opened.advertiser);
+#endif
 
       aio_connection_opened_cb(&evt->data.evt_connection_opened); // not sure why we need this
 
@@ -824,17 +708,17 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
     case sl_bt_evt_connection_closed_id:
       aio_connection_closed_cb(&evt->data.evt_connection_closed);
-      printf("Connection closed\n");
+      //printf("Connection closed\n");
       int i=0;
       for (; i<live_connections; i++) {
           //compare address!
           if (memcmp(connections[i].device_address.addr,evt->data.evt_connection_opened.address.addr,6)==0) {
-              printf("FOUND CONNETION TO REMOVE\r\n\n");
+              //printf("FOUND CONNETION TO REMOVE\r\n\n");
               break;
           }
       }
       if (i==live_connections) {
-          printf("FAILE TO FIND THE ONE TO REMOVE...\r\n\n");
+          //printf("FAILE TO FIND THE ONE TO REMOVE...\r\n\n");
       }
       for (int j=i+1; j<live_connections; j++) {
           connections[j-1]=connections[j];
@@ -887,9 +771,10 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
           break;
         default:
-          printf("WRITE TO WTF\r\n\n");
+         // printf("WRITE TO WTF\r\n\n");
           break;
       }
+        break;
       case sl_bt_evt_system_external_signal_id:
         if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
             sl_status_t sc;
@@ -897,7 +782,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
             s[0]=INA3221_getCurrentA(&ina3221_sensor,  1);
             s[1]=INA3221_getCurrentA(&ina3221_sensor,  2);
             s[2]=INA3221_getCurrentA(&ina3221_sensor,  3);
-            printf("CURRENTS %0.6f %0.6f %0.6f\r\n\n",s[0],s[1],s[2]);
+            printf("CURRENTS2 %0.6f %0.6f %0.6f\r\n\n",s[0],s[1],s[2]);
 
             for (int i=0; i<live_connections; i++) {
               sc = sl_bt_gatt_server_send_characteristic_notification(
@@ -928,6 +813,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
             if (_char_handle>0) {
               uint8_t toggle[NRELAYS] = { 0x03, 0x03, 0x02 };
               int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,_char_handle,NRELAYS,toggle);
+              printf("TOGGLED!\r\n\n");
 
             }
         //printf("TOGGLE IS %d\r\n\n",sc);
@@ -948,7 +834,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
   sl_status_t sc;
   bd_addr address;
   uint8_t address_type;
-  uint8_t system_id[8];
+  //uint8_t system_id[8];
 
   switch (SL_BT_MSG_ID(evt->header)) {
     // -------------------------------
@@ -980,7 +866,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
                                                    sizeof(system_id),
                                                    system_id);
       sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to write attribute\n",
+                    "[E: 0x%04x] Failed to write attribute WTF\n",
                     (int)sc);
 
       // Create an advertising set.

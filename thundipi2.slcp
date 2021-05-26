@@ -19,20 +19,18 @@ source:
 project_name: thundipi2
 quality: production
 component:
+- {id: BGM220SC22WGA}
 - {id: iostream_retarget_stdio}
 - {id: iostream_swo}
 - {id: mpu}
-- {id: gpiointerrupt}
-- {id: rail_util_pti}
-- instance: [INA3221, ads1115, sensor]
+- instance: [INA3221]
   id: i2cspm
 - {id: printf}
 - {id: component_catalog}
 - {id: ota_dfu}
-- {id: brd4184a}
+- {id: gpiointerrupt}
 - {id: bootloader_interface}
 - {id: app_assert}
-- {id: EFR32BG22C224F512IM40}
 - {id: bt_fp_soc_default}
 other_file:
 - {path: create_bl_files.bat}

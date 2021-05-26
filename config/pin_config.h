@@ -56,6 +56,14 @@
 // [PRS.SYNCH3]$
 
 // $[GPIO]
+// GPIO SWCLK on PA01
+#define GPIO_SWCLK_PORT                          gpioPortA
+#define GPIO_SWCLK_PIN                           1
+
+// GPIO SWDIO on PA02
+#define GPIO_SWDIO_PORT                          gpioPortA
+#define GPIO_SWDIO_PIN                           2
+
 // GPIO SWV on PA03
 #define GPIO_SWV_PORT                            gpioPortA
 #define GPIO_SWV_PIN                             3
