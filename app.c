@@ -66,7 +66,7 @@ enum APP_STATE {
 #define NBUTTONS 1
 #define T_RELAY 0
 #define T_SWITCH 1
-#define TYPE 0
+#define TYPE 1
 
 #define PIN_SET 0
 #define PIN_UNSET 1
@@ -164,12 +164,23 @@ static void button_change(uint8_t idx)
 
              sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
 
+
+
+
              break;
            default:
              break;
          }
 #else
          sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
+         int state = GPIO_PinInGet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
+         printf("STATE IS %d\r\n\n",state);
+         if (state==1) {
+             GPIO_PinOutClear(BUTTON1_LED_PORT,BUTTON1_LED_PIN);
+         } else {
+
+             GPIO_PinOutSet(BUTTON1_LED_PORT,BUTTON1_LED_PIN);
+         }
 #endif
   }
 }
@@ -192,6 +203,8 @@ SL_WEAK void app_init(void)
 
 
 #elif TYPE == T_SWITCH
+  GPIO_PinModeSet(BUTTON1_LED_PORT,BUTTON1_LED_PIN,  gpioModePushPull,0);
+
 #endif
 
   CMU_ClockEnable(cmuClock_GPIO, true);
@@ -480,6 +493,7 @@ static int process_scan_response( sl_bt_evt_scanner_scan_report_t *response) {
       memcpy(name, &(response->data.data[i + 2]), ad_len - 1);
       name[ad_len - 1] = 0;
       if (strcmp(name,"thundipi")==0)  {
+          printf("FOUDN THUNDIPI!\r\n\n");
           found=1;
       }
     }
@@ -495,18 +509,23 @@ static int process_scan_response( sl_bt_evt_scanner_scan_report_t *response) {
 
 //static uint8_t _conn_handle = 0xFF;
 //static uint8_t _bonding_handle = 0xFF;
+uint8_t system_id[8];
 void sl_bt_aio_process(sl_bt_msg_t *evt) {
   // Handle stack events
-  // printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
+  printf("EVENT %x\r\n\n",SL_BT_MSG_ID(evt->header));
   switch (SL_BT_MSG_ID(evt->header)) {
     case sl_bt_evt_system_boot_id:
       aio_system_boot_cb();
+
+      int16_t support_min, support_max, set_min, set_max, rf_path_gain;
+      sl_bt_system_get_tx_power_setting(&support_min,&support_max,&set_min,&set_max,&rf_path_gain);
+      printf("TX POWER %d %d %d %d %d\r\n\n" , support_min , support_max, set_min, set_max, rf_path_gain);
 
 /*#if TYPE==T_SWITCH
       uint8_t switch_name[]={ 0x74,0x68,0x75,0x6E,0x64,0x69,0x73,0x77,0x69,0x74,0x63,0x68};
       uint16_t result = sl_bt_gatt_server_write_attribute_value(gattdb_device_name,0,sizeof(switch_name),switch_name);
 #endif*/
-      //sl_bt_sm_delete_bondings();
+      sl_bt_sm_delete_bondings();
       sl_bt_sm_store_bonding_configuration(8, 2);
       sl_bt_sm_set_passkey(0);
       sl_bt_sm_configure(0x0B, sm_io_capability_displayyesno); //sm_io_capability_displayonly); //0x0F, sm_io_capability_displayyesno);// );
@@ -554,12 +573,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 #endif
        //sl_bt_sm_bonding_confirm(_conn_handle,1);
        sl_bt_sm_bonding_confirm(evt->data.evt_sm_confirm_bonding.connection,1);
-       //printf("Return from bonding\r\n\n");
+       printf("Return from bonding\r\n\n");
 
       break;
 
     case sl_bt_evt_connection_parameters_id:
-#ifdef PI_DEBUG
       printf("sl_bt_evt_connection_parameters_id\r\n");
         printf("    Event Parameters:\r\n");
         printf("        connection:    0x%02x\r\n", evt->data.evt_connection_parameters.connection);
@@ -568,11 +586,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         printf("        timeout:       0x%04x\r\n", evt->data.evt_connection_parameters.timeout);
         printf("        security_mode: %d\r\n",     evt->data.evt_connection_parameters.security_mode);
         printf("        txsize:        0x%04x\r\n", evt->data.evt_connection_parameters.txsize);
-#endif
-        {
-          uint8_t connection_handle = evt->data.evt_connection_parameters.connection;
+
+          //uint8_t connection_handle = evt->data.evt_connection_parameters.connection;
           if(evt->data.evt_connection_parameters.security_mode < 2) {
-              sl_bt_sm_increase_security(connection_handle);
+              sl_bt_sm_increase_security(evt->data.evt_connection_parameters.connection);
+              printf("INCREASE SECURITY\r\n");
           } else { //security is >=3
   #if TYPE == T_SWITCH
               if (app_state==SWITCH_CONNECT) {
@@ -584,7 +602,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
   #endif
             //gecko_cmd_hardware_set_soft_timer(0, INCREASE_SEC_TMR_HANDLE, 1); //Clear timer
           }
-        }
+
         break;
         //sl_bt_sm_increase_security(_conn_handle); //not sure about this
         //sl_bt_sm_passkey_confirm(_conn_handle, 1);
@@ -621,7 +639,6 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 
 
-#ifdef PI_DEBUG
     case sl_bt_evt_connection_phy_status_id:
         printf("sl_bt_evt_connection_phy_status_id\r\n\n");
         printf("    Event Parameters:\r\n\n");
@@ -643,7 +660,6 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
     case sl_bt_evt_sm_passkey_display_id:
       printf("Passkey: %06lu", evt->data.evt_sm_passkey_display.passkey);
       break;
-#endif
     // Event raised by the security manager when a passkey needs to be confirmed
     case sl_bt_evt_sm_confirm_passkey_id:
       printf("Do you see this passkey on the other device: %06lu? (y/n)\r\n\n", evt->data.evt_sm_confirm_passkey.passkey);
@@ -653,7 +669,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
       // Event raised when bonding is successful
       case sl_bt_evt_sm_bonded_id:
-        //printf("Bonded\r\n\n");
+        printf("Bonded\r\n\n");
         //printf("--------------------------------------\r\n\n");
         // sl_bt_connection_close(_conn_handle); // not sure if we need this?
         break;
@@ -662,17 +678,16 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         //reason codes are here, https://docs.silabs.com/mcu/latest/bgm13/group-sl-status
         //((sl_status_t)0x1006) ->  SL_STATUS_BT_CTRL_PIN_OR_KEY_MISSING   ((sl_status_t)0x1006)
       case sl_bt_evt_sm_bonding_failed_id:
-        //printf("Bonding failed\r\n\n");
+        printf("Bonding failed\r\n\n");
         //printf("--------------------------------------\r\n\n");
         //gecko_cmd_sm_increase_security(_conn_handle);        case sl_bt_evt_sm_bonding_failed_id:
-        //printf("sl_bt_evt_sm_bonding_failed_id\r\n\n");
-        //printf("    Event Parameters:\r\n");
-        //printf("        connection: 0x%02x\r\n", evt->data.evt_sm_bonding_failed.connection);
-        //printf("        reason:     0x%04x\r\n\n", evt->data.evt_sm_bonding_failed.reason);
+        printf("sl_bt_evt_sm_bonding_failed_id\r\n\n");
+        printf("    Event Parameters:\r\n");
+        printf("        connection: 0x%02x\r\n", evt->data.evt_sm_bonding_failed.connection);
+        printf("        reason:     0x%04x\r\n\n", evt->data.evt_sm_bonding_failed.reason);
         break;
 
     case sl_bt_evt_connection_opened_id:
-#ifdef PI_DEBUG
         printf("sl_bt_evt_connection_opened_id\r\n\n");
         printf("    Event Parameters:\r\n");
         printf  ("        address:      %02x\r\n", evt->data.evt_connection_opened.address.addr[0]);
@@ -686,7 +701,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
         printf("        connection:   0x%02x\r\n", evt->data.evt_connection_opened.connection);
         printf("        bonding:      0x%02x\r\n", evt->data.evt_connection_opened.bonding);
         printf("        advertiser:   0x%02x\r\n\n", evt->data.evt_connection_opened.advertiser);
-#endif
+
 
       aio_connection_opened_cb(&evt->data.evt_connection_opened); // not sure why we need this
 
@@ -694,7 +709,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
       //_bonding_handle = evt->data.evt_connection_opened.bonding;
 
       if( evt->data.evt_connection_opened.bonding == 0xFF) {
-        printf("Increasing security\r\n");
+        printf("Increasing securityXX\r\n");
         sl_bt_sm_increase_security(evt->data.evt_connection_opened.connection);
       } else {
         printf("Already Bonded (ID: %d)\r\n",  evt->data.evt_connection_opened.bonding);
@@ -708,22 +723,27 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
     case sl_bt_evt_connection_closed_id:
       aio_connection_closed_cb(&evt->data.evt_connection_closed);
-      //printf("Connection closed\n");
+      printf("Connection closed\n");
       int i=0;
       for (; i<live_connections; i++) {
           //compare address!
           if (memcmp(connections[i].device_address.addr,evt->data.evt_connection_opened.address.addr,6)==0) {
-              //printf("FOUND CONNETION TO REMOVE\r\n\n");
+              printf("FOUND CONNETION TO REMOVE\r\n\n");
               break;
           }
       }
       if (i==live_connections) {
-          //printf("FAILE TO FIND THE ONE TO REMOVE...\r\n\n");
+          printf("FAILE TO FIND THE ONE TO REMOVE...\r\n\n");
       }
       for (int j=i+1; j<live_connections; j++) {
           connections[j-1]=connections[j];
       }
       live_connections--;
+
+#if TYPE == T_SWITCH
+      sl_bt_scanner_start(1, scanner_discover_generic);
+      app_state=SWITCH_CONNECT;
+#endif
       break;
 
     case sl_bt_evt_gatt_server_user_read_request_id:
@@ -922,11 +942,11 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       break;
 
     case sl_bt_evt_gatt_server_user_write_request_id:
-        //printf("WRITE\n");
+        printf("WRITE\n");
         break;
 
     case sl_bt_evt_gatt_server_user_read_request_id:
-        //printf("READ\n");
+        printf("READ\n");
         break;
 
 
