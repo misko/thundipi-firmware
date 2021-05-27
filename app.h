@@ -18,6 +18,52 @@
 #ifndef APP_H
 #define APP_H
 
+
+#include "sl_bluetooth.h"
+
+
+typedef struct {
+    bd_addr device_address;
+    uint8_t address_type;
+    uint8_t connection_handle;
+} connection;
+
+
+enum RELAY_STATE {
+  RELAY_OFF = 0,
+  RELAY_ON = 1,
+  RELAY_TOGGLE = 2,
+  RELAY_IGNORE = 3
+};
+
+enum APP_STATE {
+  IDLE,
+  RELAY_SERVE,
+  SWITCH_CONNECT,
+  SWITCH_GET_SERVICE,
+  SWITCH_GET_CHAR
+};
+
+#define PI_DEBUG 1
+#define SIGNAL_AMP_NOTIFY 0x1
+#define SIGNAL_RELAY_NOTIFY 0x2
+#define SIGNAL_SWITCH_TOGGLE 0x4
+
+#define NRELAYS 3
+#define NBUTTONS 1
+#define T_RELAY 0
+#define T_SWITCH 1
+
+#define T_TYPE 1
+
+#define PIN_SET 0
+#define PIN_UNSET 1
+
+#define RELAY_DLAY_MSEC 20
+#define BUTTON_DLAY_MSEC 150
+#define AMP_DLAY_MSEC 1000
+
+
 /**************************************************************************//**
  * Application Init.
  *****************************************************************************/
@@ -27,5 +73,9 @@ void app_init(void);
  * Application Process Action.
  *****************************************************************************/
 void app_process_action(void);
+
+
+
+
 
 #endif // APP_H

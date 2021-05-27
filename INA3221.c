@@ -1,11 +1,10 @@
 
 #include <stddef.h>
+#include "em_i2c.h"
 #include "sl_i2cspm.h"
 #include "sl_sleeptimer.h"
-#include "stddef.h"
-#include "INA3221.h"
-#include "em_i2c.h"
 #include "sl_i2cspm_instances.h"
+#include "INA3221.h"
 
 /**************************************************************************/
 /*!
@@ -130,7 +129,7 @@ void sl_ina3221_init(struct I2C_INA3221 * sensor, uint8_t i2c_addr, float shunt_
 
 int16_t from_twos(uint16_t twos) {
   if((twos>>15 && 0x01) == 1)   {
-      twos = ~(twos && 0x7FFF) + 1;
+      twos = ~(twos & 0x7FFF) + 1;
   }
   return twos;
 }
@@ -141,8 +140,7 @@ double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   sl_status_t ret=sl_INA3221_read_data(sensor, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
-      //error
-      printf("THERE WAS A BAD ERROR %d\r\n\n",channel);
+	  return -1.0;
   }
   double value_f=value>>3;
   return value_f*0.000004;
@@ -161,8 +159,7 @@ double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   sl_status_t ret=sl_INA3221_read_data(sensor, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
-      //error
-      printf("THERE WAS A BAD ERROR \r\n\n");
+      return -1.0;
   }
 
   double value_f=value>>3;

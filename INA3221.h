@@ -42,7 +42,6 @@
     CONVERSION DELAY (in mS)
     -----------------------------------------------------------------------*/
 #define INA3221_CONVERSIONDELAY (1) ///< Conversion delay
-#define INA3221_CONVERSIONDELAY (9) ///< Conversion delay
 /*=========================================================================*/
 
 #define INA3221_MANUFACTURER_ID 0xFE
