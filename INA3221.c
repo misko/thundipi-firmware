@@ -5,95 +5,13 @@
 #include "sl_sleeptimer.h"
 #include "sl_i2cspm_instances.h"
 #include "INA3221.h"
+#include "i2c_utils.h"
 
 /**************************************************************************/
 /*!
     @file     INA3221.c
-
-
 */
 /**************************************************************************/
-
-static sl_status_t sl_INA3221_read_data(struct I2C_INA3221 * sensor, uint8_t i2c_addr, uint8_t reg, uint16_t *data)
-{
-  I2C_TransferSeq_TypeDef    seq;
-  I2C_TransferReturn_TypeDef ret;
-  uint8_t                    i2c_read_data[2];
-  i2c_read_data[0]=0;
-  i2c_read_data[1]=0;
-  uint8_t                    i2c_write_data[1];
-  i2c_write_data[0]=reg;
-
-  seq.addr  = i2c_addr<<1;
-  //seq.flags = I2C_FLAG_WRITE_READ;
-  seq.flags = I2C_FLAG_WRITE;
-  /* Select command to issue */
-  seq.buf[0].data = i2c_write_data;
-  seq.buf[0].len  = 1;
-
-  ret = I2CSPM_Transfer(sensor->i2cspm, &seq);
-
-  if (ret != i2cTransferDone) { // check if i2cTransferDone
-    *data = 0;
-    return ret;
-  }
-
-  seq.addr  = i2c_addr << 1;
-  //seq.flags = I2C_FLAG_WRITE_READ;
-  seq.flags = I2C_FLAG_READ;
-  /* Select command to issue */
-  /* Select location/length of data to be read */
-  seq.buf[0].data = i2c_read_data;
-  seq.buf[0].len  = 2;
-
-  ret = I2CSPM_Transfer(sensor->i2cspm, &seq);
-
-  if (ret != i2cTransferDone) {
-    *data = 0;
-    return ret;
-  }
-
-  //*data = ((uint32_t) i2c_read_data[0] << 8) + (i2c_read_data[1] & 0xfc);
-  *data = (i2c_read_data[0] << 8) + (i2c_read_data[1]);
-
-  return SL_STATUS_OK;
-}
-
-
-/**************************************************************************/
-/*!
-    @brief  Abstract away platform differences in Arduino wire library
-
-    @param x byte to write
-*/
-/**************************************************************************/
-static sl_status_t sl_INA3221_write_data(struct I2C_INA3221 * sensor, uint8_t i2c_addr, uint8_t reg, int16_t value)
-{
-  sl_status_t retval = SL_STATUS_OK;
-  I2C_TransferSeq_TypeDef    seq;
-  I2C_TransferReturn_TypeDef ret;
-  uint8_t                    i2c_read_data[2];
-  uint8_t                    i2c_write_data[3];
-
-  seq.addr  = i2c_addr << 1;
-  seq.flags = I2C_FLAG_WRITE;
-  /* Select command to issue */
-  i2c_write_data[0] = reg;
-  i2c_write_data[1] = value >> 8;
-  i2c_write_data[2] = value & 0xFF;
-  seq.buf[0].data   = i2c_write_data;
-  seq.buf[0].len    = 3;
-  /* Select location/length of data to be read */
-  seq.buf[1].data = i2c_read_data;
-  seq.buf[1].len  = 0;
-
-  ret = I2CSPM_Transfer(sensor->i2cspm, &seq);
-
-  if (ret!=i2cTransferDone) {
-      retval = SL_STATUS_TRANSMIT;
-  }
-  return retval;
-}
 
 sl_status_t sl_ina3221_set_config(struct I2C_INA3221 * sensor)  {
 
@@ -137,7 +55,7 @@ int16_t from_twos(uint16_t twos) {
 double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
-  sl_status_t ret=sl_INA3221_read_data(sensor, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
+  sl_status_t ret=i2c_read_data(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
 	  return -1.0;
@@ -156,7 +74,7 @@ double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
 double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
-  sl_status_t ret=sl_INA3221_read_data(sensor, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
+  sl_status_t ret=i2c_read_data(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
       return -1.0;

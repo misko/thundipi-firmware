@@ -5,7 +5,7 @@
     <property object="GPIO" propertyId="ABModule.selectedRequirement" value="gpio%T%SL_DEBUG%T%sl_debug_swo_config.h"/>
     <property object="GPIO" propertyId="ABPeripheral.included" value="true"/>
     <property object="I2C0" propertyId="ABPeripheral.included" value="true"/>
-    <property object="I2C1" propertyId="ABModule.selectedRequirement" value="i2c%T%SL_I2CSPM_INA3221%T%sl_i2cspm_INA3221_config.h"/>
+    <property object="I2C1" propertyId="ABModule.selectedRequirement" value="i2c%T%SL_I2CSPM_THUNDIPII2C%T%sl_i2cspm_THUNDIPII2C_config.h"/>
     <property object="I2C1" propertyId="ABPeripheral.included" value="true"/>
     <property object="PA00" propertyId="pin.name" value="INA3221_CRITICAL"/>
     <property object="PA00" propertyId="pin.reserve" value="Reserved"/>

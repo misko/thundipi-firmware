@@ -13,6 +13,7 @@
 #include "gatt_db.h"
 #include "gpiointerrupt.h"
 #include <INA3221.h>
+#include <THUNDIPII2C.h>
 #include "pin_config.h"
 #include "app.h"
 
@@ -32,6 +33,7 @@ static int app_state = IDLE;
 static uint8_t advertising_set_handle = 0xff;
 
 static struct I2C_INA3221 ina3221_sensor;
+static struct I2C_THUNDIPII2C thundipii2c_sensor;
 
 static uint32_t _service_handle = 0;
 static uint16_t _char_handle = 0;
@@ -69,6 +71,8 @@ aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
 static void relay_off(int idx);
 static void relay_on(int idx);
 static void relay_toggle(int idx);
+
+
 
 /**************************************************************************//**
  * Timers
@@ -202,24 +206,23 @@ static void button_change(uint8_t idx) {
  * App BT
  *****************************************************************************/
 SL_WEAK void app_init(void) {
+	  printf("IN INIT\r\n\n");
 	int pin, port;
 #if T_TYPE == T_RELAY
-
   for (int idx=0; idx<NRELAYS; idx++) {
       channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
       GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
       channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
       GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
   }
-
-
-  ///sl_ads_init(&ads1115_sensor);
   sl_ina3221_init(&ina3221_sensor,INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
-
+  sl_thundipii2c_init(&thundipii2c_sensor,THUNDIPII2C_ADDRESS);
+  uint16_t thundi_id=thundipi_read_id(&thundipii2c_sensor);
+  printf("WTF GOT ID %x\r\n\n",thundi_id);
 
 #elif T_TYPE == T_SWITCH
 	GPIO_PinModeSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN, gpioModePushPull, 0);
-
+	thundipi_slave_initI2C();
 #endif
 
 	CMU_ClockEnable(cmuClock_GPIO, true);
@@ -305,7 +308,6 @@ static void aio_digital_out_write_cb_all(
 		sl_bt_evt_gatt_server_user_write_request_t *data) {
 	sl_status_t sc;
 	uint8_t att_errorcode = 0;
-	//printf("WTIING\r\n\n");
 	for (int i = 0; i < data->value.len; i++) {
 
 		if (data->value.data[i] == RELAY_OFF) {
@@ -315,9 +317,7 @@ static void aio_digital_out_write_cb_all(
 		} else if (data->value.data[i] == RELAY_TOGGLE) { //TOGGLE IT
 			relay_toggle(i);
 		} else if (data->value.data[i] == RELAY_IGNORE) { //IGNORE IT
-														  //GPIO_PinOutSet(port,pin);
 		} else {
-			//printf("Weird value to write to pin! %d\n",data->value.data[i]);
 		}
 	}
 	sc = sl_bt_gatt_server_send_user_write_response(data->connection,
@@ -638,9 +638,6 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 		aio_connection_opened_cb(&evt->data.evt_connection_opened); // not sure why we need this
 
-		//_conn_handle = evt->data.evt_connection_opened.connection;
-		//_bonding_handle = evt->data.evt_connection_opened.bonding;
-
 		if (evt->data.evt_connection_opened.bonding == 0xFF) {
 			printf("Increasing securityXX\r\n");
 			sl_bt_sm_increase_security(
@@ -661,13 +658,12 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 	case sl_bt_evt_connection_closed_id:
 		aio_connection_closed_cb(&evt->data.evt_connection_closed);
-		printf("Connection closed\n");
+		printf("Connection closed %d\n",live_connections);
 		int i = 0;
 		for (; i < live_connections; i++) {
 			//compare address!
 			if (memcmp(connections[i].device_address.addr,
 					evt->data.evt_connection_opened.address.addr, 6) == 0) {
-				printf("FOUND CONNETION TO REMOVE\r\n\n");
 				break;
 			}
 		}
@@ -871,3 +867,4 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 	}
 	sl_bt_aio_process(evt);
 }
+

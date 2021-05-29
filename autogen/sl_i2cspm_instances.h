@@ -26,9 +26,11 @@ extern "C" {
 
 
 #define SL_I2CSPM_INA3221_PRESENT
+#define SL_I2CSPM_THUNDIPII2C_PRESENT
 
 
 extern sl_i2cspm_t *sl_i2cspm_INA3221;
+extern sl_i2cspm_t *sl_i2cspm_THUNDIPII2C;
 
 void sl_i2cspm_init_instances(void);
 

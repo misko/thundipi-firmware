@@ -23,7 +23,7 @@ component:
 - {id: iostream_retarget_stdio}
 - {id: iostream_swo}
 - {id: mpu}
-- instance: [INA3221]
+- instance: [INA3221, THUNDIPII2C]
   id: i2cspm
 - {id: printf}
 - {id: component_catalog}

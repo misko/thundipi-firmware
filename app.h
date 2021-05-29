@@ -54,7 +54,7 @@ enum APP_STATE {
 #define T_RELAY 0
 #define T_SWITCH 1
 
-#define T_TYPE 1
+#define T_TYPE 0
 
 #define PIN_SET 0
 #define PIN_UNSET 1
