@@ -42,10 +42,16 @@ static uint8_t _conn_handle = 0;
 static sl_sleeptimer_timer_handle_t button_debounce_timers[NBUTTONS];
 static sl_sleeptimer_timer_handle_t relay_timers[NRELAYS];
 static sl_sleeptimer_timer_handle_t amp_notify_timer;
+static sl_sleeptimer_timer_handle_t i2c_check_timer;
+static sl_sleeptimer_timer_handle_t passkey_check_timer;
 
 static uint32_t relay_delay_ticks = 0;
 static uint32_t button_delay_ticks = 0;
 static uint32_t amp_delay_ticks = 0;
+static uint32_t i2c_delay_ticks = 0;
+static uint32_t passkey_delay_ticks = 0;
+
+static uint16_t passkey_repeats=0;
 
 static void
 relay_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
@@ -53,6 +59,10 @@ static void
 button_debounce_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
 static void
 amp_notify_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
+static void
+i2c_check_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
+static void
+passkey_check_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
 
 static void
 button_change(uint8_t idx);
@@ -71,8 +81,6 @@ aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
 static void relay_off(int idx);
 static void relay_on(int idx);
 static void relay_toggle(int idx);
-
-
 
 /**************************************************************************//**
  * Timers
@@ -102,6 +110,22 @@ static void amp_notify_timer_callback(sl_sleeptimer_timer_handle_t *handle,
 	(void) handle;
 	//TODO optimize to only if current changes
 	sl_bt_external_signal(SIGNAL_AMP_NOTIFY);
+}
+
+static void i2c_check_timer_callback(sl_sleeptimer_timer_handle_t *handle,
+		void *data) {
+	(void) data;
+	(void) handle;
+	//TODO optimize to only if current changes
+	sl_bt_external_signal(SIGNAL_I2C_CHECK);
+}
+
+static void passkey_check_timer_callback(sl_sleeptimer_timer_handle_t *handle,
+		void *data) {
+	(void) data;
+	(void) handle;
+	//TODO optimize to only if current changes
+	sl_bt_external_signal(SIGNAL_PASSKEY_CHECK);
 }
 
 /**************************************************************************//**
@@ -164,30 +188,28 @@ static void button_change(uint8_t idx) {
 		}
 		button_debounce_state[idx] = 1;
 		sl_sleeptimer_start_timer(button_debounce_timers + idx,
-				button_delay_ticks, button_debounce_timer_callback, (void*)(int)idx, 0, 0);
+				button_delay_ticks, button_debounce_timer_callback,
+				(void*) (int) idx, 0, 0);
 
 #if T_TYPE == T_RELAY
-      switch(idx) {
-        case 0:
-          relay_toggle(0);
-          break;
-        case 1:
-          relay_toggle(1);
-          break;
-        case 2:
-          relay_toggle(2);
-          break;
-        case 3:
+		switch (idx) {
+		case 0:
+			relay_toggle(0);
+			break;
+		case 1:
+			relay_toggle(1);
+			break;
+		case 2:
+			relay_toggle(2);
+			break;
+		case 3:
 
-          sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
+			sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
 
-
-
-
-          break;
-        default:
-          break;
-      }
+			break;
+		default:
+			break;
+		}
 #else
 		sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
 		int state = GPIO_PinInGet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
@@ -206,19 +228,20 @@ static void button_change(uint8_t idx) {
  * App BT
  *****************************************************************************/
 SL_WEAK void app_init(void) {
-	  printf("IN INIT\r\n\n");
+	printf("IN INIT x1\r\n\n");
 	int pin, port;
 #if T_TYPE == T_RELAY
-  for (int idx=0; idx<NRELAYS; idx++) {
-      channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
-      GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
-      channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
-      GPIO_PinModeSet(port,pin,  gpioModePushPull,0);
-  }
-  sl_ina3221_init(&ina3221_sensor,INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
-  sl_thundipii2c_init(&thundipii2c_sensor,THUNDIPII2C_ADDRESS);
-  uint16_t thundi_id=thundipi_read_id(&thundipii2c_sensor);
-  printf("WTF GOT ID %x\r\n\n",thundi_id);
+	for (int idx = 0; idx < NRELAYS; idx++) {
+		channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
+		GPIO_PinModeSet(port, pin, gpioModePushPull, 0);
+		channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
+		GPIO_PinModeSet(port, pin, gpioModePushPull, 0);
+	}
+	sl_ina3221_init(&ina3221_sensor, INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
+	sl_thundipii2c_init(&thundipii2c_sensor, THUNDIPII2C_ADDRESS);
+
+	uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
+	printf("THUNID IID GOT ID %x\r\n\n", thundi_id);
 
 #elif T_TYPE == T_SWITCH
 	GPIO_PinModeSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN, gpioModePushPull, 0);
@@ -242,15 +265,20 @@ SL_WEAK void app_init(void) {
 			* sl_sleeptimer_get_timer_frequency()) / 1000;
 	amp_delay_ticks = ((uint64_t) AMP_DLAY_MSEC
 			* sl_sleeptimer_get_timer_frequency()) / 1000;
+	i2c_delay_ticks = ((uint64_t) I2C_DLAY_MSEC
+			* sl_sleeptimer_get_timer_frequency()) / 1000;
+	passkey_delay_ticks = ((uint64_t) PASSKEY_DLAY_MSEC
+			* sl_sleeptimer_get_timer_frequency()) / 1000;
+
+
 
 #if T_TYPE == T_RELAY
-  sl_status_t sc= sl_sleeptimer_start_periodic_timer ( &amp_notify_timer,
-                                                       amp_delay_ticks,
-                                                       amp_notify_timer_callback,
-                                                       NULL,
-                                                       0,
-                                                       0
-  );
+	sl_sleeptimer_start_periodic_timer(&amp_notify_timer,
+			amp_delay_ticks, amp_notify_timer_callback,
+			NULL, 0, 0);
+	sl_sleeptimer_start_periodic_timer(&i2c_check_timer,
+			i2c_delay_ticks, i2c_check_timer_callback,
+			NULL, 0, 0);
 #endif
 }
 
@@ -298,7 +326,8 @@ static void aio_analog_out_read_cb_all(
 	printf("CURRENTS %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
 
 	sc = sl_bt_gatt_server_send_user_read_response(data->connection,
-			data->characteristic, 0, sizeof(double) * NRELAYS, (const uint8_t*)s,
+			data->characteristic, 0, sizeof(double) * NRELAYS,
+			(const uint8_t*) s,
 			NULL);
 	sl_app_assert(sc == SL_STATUS_OK,
 			"[E: 0x%04x] Failed to send user read response\n", (int )sc);
@@ -344,7 +373,7 @@ static void relay_off(int idx) {
 	channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
 	GPIO_PinOutSet(port, pin);
 	sl_sleeptimer_start_timer(relay_timers + idx, relay_delay_ticks,
-			relay_timer_callback, (void*)(int)idx, 0, 0);
+			relay_timer_callback, (void*) (int) idx, 0, 0);
 	relay_state[idx] = 0;
 
 	sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
@@ -363,7 +392,7 @@ static void relay_on(int idx) {
 	channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
 	GPIO_PinOutSet(port, pin);
 	sl_sleeptimer_start_timer(relay_timers + idx, relay_delay_ticks,
-			relay_timer_callback, (void*)(int)idx, 0, 0);
+			relay_timer_callback, (void*) (int) idx, 0, 0);
 	relay_state[idx] = 1;
 
 	sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
@@ -435,6 +464,8 @@ static int process_scan_response(sl_bt_evt_scanner_scan_report_t *response) {
  * Main BT handling loop
  *****************************************************************************/
 static uint8_t system_id[8];
+uint32_t bt_bonding_passkey;
+uint8_t bt_bonding_connection;
 void sl_bt_aio_process(sl_bt_msg_t *evt) {
 	// Handle stack events
 	//printf("EVENT %x\r\n\n", SL_BT_MSG_ID(evt->header));
@@ -450,20 +481,25 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 #endif
 		sl_bt_sm_delete_bondings();
 		sl_bt_sm_store_bonding_configuration(8, 2);
-		sl_bt_sm_set_passkey(0);
+
 		sl_bt_sm_configure(0x0B, sm_io_capability_displayyesno); //sm_io_capability_displayonly); //0x0F, sm_io_capability_displayyesno);// );
+
 		sl_bt_sm_set_bondable_mode(1);
 
 #if T_TYPE == T_RELAY
-      sl_bt_sm_set_bondable_mode(1);
-      printf("RELAY sl_bt_evt_system_boot_id\r\n\n");
-      app_state=RELAY_SERVE;
+		sl_bt_sm_set_bondable_mode(1);
+		printf("RELAY sl_bt_evt_system_boot_id\r\n\n");
+		app_state = RELAY_SERVE;
 #elif T_TYPE == T_SWITCH
 		sl_bt_sm_set_bondable_mode(0); //TODO SHOULD THIS BE A 1?
 		printf("SWITCH sl_bt_evt_system_boot_id\r\n\n");
 		sl_bt_scanner_start(1, scanner_discover_generic);
 		app_state = SWITCH_CONNECT;
 #endif
+		sl_status_t sc = sl_bt_sm_set_passkey(1234);
+	    sl_app_assert(sc == SL_STATUS_OK,
+	                  "[E: 0x%04x] Failed to set using random passkeys\r\n",
+	                  (int)sc);
 		break;
 	case sl_bt_evt_scanner_scan_report_id:
 		if (process_scan_response(&(evt->data.evt_scanner_scan_report)) == 1) {
@@ -588,9 +624,21 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		printf(
 				"Do you see this passkey on the other device: %06lu? (y/n)\r\n\n",
 				evt->data.evt_sm_confirm_passkey.passkey);
-		sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,
-				1);
-		//sl_bt_sm_passkey_confirm(_conn_handle, 0); //no
+		bt_bonding_passkey = evt->data.evt_sm_confirm_passkey.passkey;
+		bt_bonding_connection = evt->data.evt_sm_confirm_passkey.connection;
+
+#if T_TYPE==T_REALY
+		thundipi_write_passkey(&thundipii2c_sensor, bt_bonding_passkey) ;
+#endif
+#if T_TYPE==T_SWITCH
+		thundipi_write_passkey_to_mem(bt_bonding_passkey);
+#endif
+		passkey_repeats=PASSKEY_CHECKS;
+		sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
+				passkey_check_timer_callback, (void*)0x0, 0, 0);
+
+
+		//sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,	1);
 		break;
 
 		// Event raised when bonding is successful
@@ -613,6 +661,74 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 				evt->data.evt_sm_bonding_failed.connection);
 		printf("        reason:     0x%04x\r\n\n",
 				evt->data.evt_sm_bonding_failed.reason);
+		/* If the attempt at bonding/pairing failed, clear the bonded flag and display the reason */
+		switch (evt->data.evt_sm_bonding_failed.reason) {
+		case 0x0301:
+			printf("The user input of passkey failed\r\n");
+			break;
+
+		case 0x0302:
+			printf("Out of Band data is not available for authentication\r\n");
+			break;
+
+		case 0x0303:
+			printf(
+					"The pairing procedure cannot be performed as authentication requirements cannot be met due to IO capabilities of one or both devices\r\n");
+			break;
+
+		case 0x0304:
+			printf(
+					"The confirm value does not match the calculated compare value\r\n");
+			break;
+
+		case 0x0305:
+			printf("Pairing is not supported by the device\r\n");
+			break;
+
+		case 0x0306:
+			printf(
+					"The resultant encryption key size is insufficient for the security requirements of this device\r\n");
+			break;
+
+		case 0x0307:
+			printf(
+					"The SMP command received is not supported on this device\r\n");
+			break;
+
+		case 0x0308:
+			printf("Pairing failed due to an unspecified reason\r\n");
+			break;
+
+		case 0x0309:
+			printf(
+					"Pairing or authentication procedure is disallowed because too little time has elapsed since last pairing request or security request\r\n");
+			break;
+
+		case 0x030A:
+			printf("Invalid Parameters\r\n");
+			break;
+
+		case 0x030B:
+			printf("The bonding does not exist\r\n");
+			break;
+
+		case 0x0206:
+			printf(
+					"Pairing failed because of missing PIN, or authentication failed because of missing Key\r\n");
+			printf(
+					"Delete the Health Thermometer device from the Tablet to force bonding\r\n");
+			break;
+
+		case 0x0185:
+			printf("Command or Procedure failed due to timeout\r\n");
+			break;
+
+		default:
+			printf("Unknown error: 0x%X\r\n",
+					evt->data.evt_sm_bonding_failed.reason);
+			break;
+		}
+
 		break;
 
 	case sl_bt_evt_connection_opened_id:
@@ -658,7 +774,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 	case sl_bt_evt_connection_closed_id:
 		aio_connection_closed_cb(&evt->data.evt_connection_closed);
-		printf("Connection closed %d\n",live_connections);
+		printf("Connection closed %d\n", live_connections);
 		int i = 0;
 		for (; i < live_connections; i++) {
 			//compare address!
@@ -676,7 +792,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		live_connections--;
 
 #if T_TYPE == T_SWITCH
-		sl_bt_scanner_start(1, scanner_discover_generic);
+		//sl_bt_scanner_start(1, scanner_discover_generic);
 		app_state = SWITCH_CONNECT;
 #endif
 		break;
@@ -715,6 +831,13 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
 			sl_status_t sc;
 			double s[NRELAYS];
+
+
+			s[0] = INA3221_getBusVoltageV(&ina3221_sensor, 1);
+			s[1] = INA3221_getBusVoltageV(&ina3221_sensor, 2);
+			s[2] = INA3221_getBusVoltageV(&ina3221_sensor, 3);
+			printf("volts2 %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
+
 			s[0] = INA3221_getCurrentA(&ina3221_sensor, 1);
 			s[1] = INA3221_getCurrentA(&ina3221_sensor, 2);
 			s[2] = INA3221_getCurrentA(&ina3221_sensor, 3);
@@ -723,12 +846,13 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			for (int i = 0; i < live_connections; i++) {
 				sc = sl_bt_gatt_server_send_characteristic_notification(
 						connections[i].connection_handle,
-						gattdb_amps, sizeof(double) * NRELAYS, &s,
+						gattdb_amps, sizeof(double) * NRELAYS, (uint8_t*)&s,
 						NULL);
-				sl_app_assert(sc == SL_STATUS_OK,
-						"[E: 0x%04x] Failed to send user notify\n", (int )sc);
+				//sl_app_assert(sc == SL_STATUS_OK,
+				//		"[E: 0x%04x] Failed to send user notify\n", (int )sc);
 			}
-		} else if (evt->data.evt_system_external_signal.extsignals
+		}
+		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_RELAY_NOTIFY) {
 			for (int i = 0; i < live_connections; i++) {
 				sl_status_t sc =
@@ -736,16 +860,17 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 						//0xFF,
 								connections[i].connection_handle,
 								gattdb_switch,
-								NRELAYS, &relay_state,
+								NRELAYS, (uint8_t*)&relay_state,
 								NULL);
-				sl_app_assert(sc == SL_STATUS_OK,
-						"[E: 0x%04x] Failed to send user notify\n", (int )sc);
+				//sl_app_assert(sc == SL_STATUS_OK,
+				//		"[E: 0x%04x] Failed to send user notify\n", (int )sc);
 			}
-		} else if (evt->data.evt_system_external_signal.extsignals
+		}
+		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_SWITCH_TOGGLE) {
 			if (_char_handle > 0) {
 				uint8_t toggle[NRELAYS] = { 0x03, 0x03, 0x02 };
-				int sc = sl_bt_gatt_write_characteristic_value(_conn_handle,
+				sl_bt_gatt_write_characteristic_value(_conn_handle,
 						_char_handle,
 						NRELAYS, toggle);
 				printf("TOGGLED!\r\n\n");
@@ -753,6 +878,45 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			}
 			//printf("TOGGLE IS %d\r\n\n",sc);
 		}
+		if (evt->data.evt_system_external_signal.extsignals
+				& SIGNAL_I2C_CHECK) {
+			//printf("I2C CHECK\r\n\n");
+			uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
+			printf("WTF GOT ID %x\r\n\n", thundi_id);
+		}
+		if (evt->data.evt_system_external_signal.extsignals
+				& SIGNAL_PASSKEY_CHECK) {
+			//printf("I2C CHECK\r\n\n");
+#if T_TYPE == T_RELAY
+			uint32_t slave_passkey=thundipi_read_passkey(&thundipii2c_sensor);
+			printf("WTF GOT PASSKYE  %d\r\n\n", slave_passkey);
+			if (slave_passkey==bt_bonding_passkey) {
+
+				printf("WTF GOT PASSKYE  %d - bonding\r\n\n", slave_passkey);
+				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
+			} else if ((passkey_repeats--)>0) {
+				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
+						passkey_check_timer_callback, (void*)0x0, 0, 0);
+			}
+#endif
+
+#if T_TYPE == T_SWITCH
+			//sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,1);
+			uint32_t their_key = get_their_key();
+			printf("THeir key %d , our key %d\r\n\n",bt_bonding_passkey,their_key);
+			if (bt_bonding_passkey==their_key) {
+				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
+				printf("THeir key %d , our key %d - trying to  bond!\r\n\n",bt_bonding_passkey,their_key);
+			} else if ((passkey_repeats--)>0) {
+				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
+						passkey_check_timer_callback, (void*)0x0, 0, 0);
+			}
+#endif
+		}
+
+
+
+
 		break;
 		break;
 	}
@@ -806,24 +970,19 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 		sl_app_assert(sc == SL_STATUS_OK,
 				"[E: 0x%04x] Failed to create advertising set\n", (int )sc);
 #if T_TYPE==T_RELAY
-      // Set advertising interval to 100ms.
-      sc = sl_bt_advertiser_set_timing(
-          advertising_set_handle,
-          160, // min. adv. interval (milliseconds * 1.6)
-          160, // max. adv. interval (milliseconds * 1.6)
-          0,   // adv. duration
-          0);  // max. num. adv. events
-      sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to set advertising timing\n",
-                    (int)sc);
-      // Start general advertising and enable connections.
-      sc = sl_bt_advertiser_start(
-          advertising_set_handle,
-          advertiser_general_discoverable,
-          advertiser_connectable_scannable);
-      sl_app_assert(sc == SL_STATUS_OK,
-                    "[E: 0x%04x] Failed to start advertising\n",
-                    (int)sc);
+		// Set advertising interval to 100ms.
+		sc = sl_bt_advertiser_set_timing(advertising_set_handle, 160, // min. adv. interval (milliseconds * 1.6)
+				160, // max. adv. interval (milliseconds * 1.6)
+				0,   // adv. duration
+				0);  // max. num. adv. events
+		sl_app_assert(sc == SL_STATUS_OK,
+				"[E: 0x%04x] Failed to set advertising timing\n", (int )sc);
+		// Start general advertising and enable connections.
+		sc = sl_bt_advertiser_start(advertising_set_handle,
+				advertiser_general_discoverable,
+				advertiser_connectable_scannable);
+		sl_app_assert(sc == SL_STATUS_OK,
+				"[E: 0x%04x] Failed to start advertising\n", (int )sc);
 #endif
 		break;
 

@@ -48,6 +48,8 @@ enum APP_STATE {
 #define SIGNAL_AMP_NOTIFY 0x1
 #define SIGNAL_RELAY_NOTIFY 0x2
 #define SIGNAL_SWITCH_TOGGLE 0x4
+#define SIGNAL_I2C_CHECK 0x8
+#define SIGNAL_PASSKEY_CHECK 0x10
 
 #define NRELAYS 3
 #define NBUTTONS 1
@@ -62,6 +64,9 @@ enum APP_STATE {
 #define RELAY_DLAY_MSEC 20
 #define BUTTON_DLAY_MSEC 150
 #define AMP_DLAY_MSEC 1000
+#define I2C_DLAY_MSEC 1000
+#define PASSKEY_DLAY_MSEC 1000
+#define PASSKEY_CHECKS 10
 
 
 /**************************************************************************//**

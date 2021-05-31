@@ -26,7 +26,7 @@ sl_status_t sl_ina3221_set_config(struct I2C_INA3221 * sensor)  {
                     INA3221_CONFIG_MODE_2 |
                     INA3221_CONFIG_MODE_1 |
                     INA3221_CONFIG_MODE_0;
-  return sl_INA3221_write_data(sensor, sensor->m_i2cAddress, INA3221_REG_CONFIG, config);
+  return i2c_write_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_CONFIG, config);
 
 }
 
@@ -55,7 +55,7 @@ int16_t from_twos(uint16_t twos) {
 double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
-  sl_status_t ret=i2c_read_data(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
+  sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
 	  return -1.0;
@@ -74,7 +74,7 @@ double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
 double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
-  sl_status_t ret=i2c_read_data(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
+  sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
       return -1.0;
