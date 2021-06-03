@@ -53,6 +53,9 @@ static uint32_t passkey_delay_ticks = 0;
 
 static uint16_t passkey_repeats=0;
 
+
+bd_addr address;
+
 static void
 relay_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
 static void
@@ -276,10 +279,11 @@ SL_WEAK void app_init(void) {
 	sl_sleeptimer_start_periodic_timer(&amp_notify_timer,
 			amp_delay_ticks, amp_notify_timer_callback,
 			NULL, 0, 0);
+#endif
+
 	sl_sleeptimer_start_periodic_timer(&i2c_check_timer,
 			i2c_delay_ticks, i2c_check_timer_callback,
 			NULL, 0, 0);
-#endif
 }
 
 SL_WEAK void app_process_action(void) {
@@ -424,10 +428,15 @@ void bd_addr_to_char(bd_addr addr, char *ary) {
 	ary[17] = '\0';
 }
 
+
 static int process_scan_response(sl_bt_evt_scanner_scan_report_t *response) {
 	// Decoding advertising packets is done here. The list of AD types can be found
 	// at: https://www.bluetooth.com/specifications/assigned-numbers/Generic-Access-Profile
-
+#if T_TYPE==T_SWITCH // switch only bonds over I2C
+	if (memcmp(response->address.addr,thundipi_read_addr(),6)!=0) { // not the right address
+		return 0;
+	}
+#endif
 	int ad_len;
 	int ad_type;
 	char name[32];
@@ -493,13 +502,13 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 #elif T_TYPE == T_SWITCH
 		sl_bt_sm_set_bondable_mode(0); //TODO SHOULD THIS BE A 1?
 		printf("SWITCH sl_bt_evt_system_boot_id\r\n\n");
-		sl_bt_scanner_start(1, scanner_discover_generic);
-		app_state = SWITCH_CONNECT;
+		//sl_bt_scanner_start(1, scanner_discover_generic);
+		app_state = SWITCH_I2C_WAIT;
 #endif
-		sl_status_t sc = sl_bt_sm_set_passkey(1234);
-	    sl_app_assert(sc == SL_STATUS_OK,
-	                  "[E: 0x%04x] Failed to set using random passkeys\r\n",
-	                  (int)sc);
+		//sl_status_t sc = sl_bt_sm_set_passkey(1234);
+	    //sl_app_assert(sc == SL_STATUS_OK,
+	    //              "[E: 0x%04x] Failed to set using random passkeys\r\n",
+	    //              (int)sc);
 		break;
 	case sl_bt_evt_scanner_scan_report_id:
 		if (process_scan_response(&(evt->data.evt_scanner_scan_report)) == 1) {
@@ -555,7 +564,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			printf("INCREASE SECURITY\r\n");
 		} else { //security is >=3
 #if T_TYPE == T_SWITCH
-			if (app_state == SWITCH_CONNECT) {
+			if (app_state == SWITCH_SCAN) {
 				app_state = SWITCH_GET_SERVICE;
 				sl_bt_gatt_discover_primary_services_by_uuid(
 						evt->data.evt_connection_parameters.connection, 2,
@@ -793,7 +802,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 #if T_TYPE == T_SWITCH
 		//sl_bt_scanner_start(1, scanner_discover_generic);
-		app_state = SWITCH_CONNECT;
+		app_state = SWITCH_I2C_WAIT;
 #endif
 		break;
 
@@ -829,7 +838,6 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		break;
 	case sl_bt_evt_system_external_signal_id:
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
-			sl_status_t sc;
 			double s[NRELAYS];
 
 
@@ -844,7 +852,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			printf("CURRENTS2 %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
 
 			for (int i = 0; i < live_connections; i++) {
-				sc = sl_bt_gatt_server_send_characteristic_notification(
+				sl_bt_gatt_server_send_characteristic_notification(
 						connections[i].connection_handle,
 						gattdb_amps, sizeof(double) * NRELAYS, (uint8_t*)&s,
 						NULL);
@@ -855,8 +863,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_RELAY_NOTIFY) {
 			for (int i = 0; i < live_connections; i++) {
-				sl_status_t sc =
-						sl_bt_gatt_server_send_characteristic_notification(
+				sl_bt_gatt_server_send_characteristic_notification(
 						//0xFF,
 								connections[i].connection_handle,
 								gattdb_switch,
@@ -880,19 +887,28 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_I2C_CHECK) {
-			//printf("I2C CHECK\r\n\n");
+#if T_TYPE == T_RELAY
 			uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
-			printf("WTF GOT ID %x\r\n\n", thundi_id);
+			if (thundi_id==0xF1E2) {
+				printf("Physically connected to thunidpi !\r\n\n");
+				thundipi_write_address(&thundipii2c_sensor, address.addr);
+			}
+#endif
+
+#if T_TYPE == T_SWITCH
+			if (app_state==SWITCH_I2C_WAIT) {
+				app_state=SWITCH_SCAN;
+				sl_bt_scanner_start(1, scanner_discover_generic);
+			}
+#endif
 		}
 		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_PASSKEY_CHECK) {
-			//printf("I2C CHECK\r\n\n");
 #if T_TYPE == T_RELAY
 			uint32_t slave_passkey=thundipi_read_passkey(&thundipii2c_sensor);
-			printf("WTF GOT PASSKYE  %d\r\n\n", slave_passkey);
 			if (slave_passkey==bt_bonding_passkey) {
 
-				printf("WTF GOT PASSKYE  %d - bonding\r\n\n", slave_passkey);
+				printf("Trying to bonding\r\n\n", slave_passkey); //TODO PHONE BONDING HERE!
 				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
 			} else if ((passkey_repeats--)>0) {
 				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
@@ -903,10 +919,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 #if T_TYPE == T_SWITCH
 			//sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,1);
 			uint32_t their_key = get_their_key();
-			printf("THeir key %d , our key %d\r\n\n",bt_bonding_passkey,their_key);
 			if (bt_bonding_passkey==their_key) {
 				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
-				printf("THeir key %d , our key %d - trying to  bond!\r\n\n",bt_bonding_passkey,their_key);
+				printf("Trying to bonding!\r\n\n",bt_bonding_passkey,their_key);
 			} else if ((passkey_repeats--)>0) {
 				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
 						passkey_check_timer_callback, (void*)0x0, 0, 0);
@@ -928,9 +943,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
  *
  * @param[in] evt Event coming from the Bluetooth stack.
  *****************************************************************************/
+
 void sl_bt_on_event(sl_bt_msg_t *evt) {
 	sl_status_t sc;
-	bd_addr address;
 	uint8_t address_type;
 	//uint8_t system_id[8];
 

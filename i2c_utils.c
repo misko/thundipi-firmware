@@ -71,6 +71,7 @@ sl_status_t i2c_read_data_uint16(sl_i2cspm_t *i2cspm, uint8_t i2c_addr,
 	data[0]=data[1];888
 	printf("WTF %d %d\r\n\n",data[0],data[1])*/
 	sl_status_t sc = i2c_read_data(i2cspm, i2c_addr, reg, 2, (uint8_t*)data);
+	//printf("GOT DATA %d\r\n\n",*data);
 	*data = __ntohs(*data);
 	return sc;
 }

@@ -43,7 +43,7 @@ void thundipi_slave_initI2C(void) {
 
 
 	//set up the registers
-
+	memset(thundi_pi_slave_i2c_Buffer,0,THUNDIPI_SLAVE_I2C_BUFFER_SIZE);
 	thundi_pi_slave_i2c_Buffer[1]=0xF1;
 	thundi_pi_slave_i2c_Buffer[2]=0xE2;
 
@@ -122,7 +122,7 @@ void I2C1_IRQHandler(void) {
 					// invalid buffer index; transfer data as if slave non-responsive
 					I2C1->TXDATA = 0xFF;
 				}
-				printf(">TX\r\n\n"); // %x %d\r\n\n",I2C1->TXDATA,thundi_pi_slave_i2c_BufferIndex);
+				//printf(">TX\r\n\n"); // %x %d\r\n\n",I2C1->TXDATA,thundi_pi_slave_i2c_BufferIndex);
 			} else {
 				thundi_pi_slave_i2c_gotTargetAddress = false;
 			}
@@ -156,7 +156,7 @@ void I2C1_IRQHandler(void) {
 				// verify that target address is valid
 				if (thundi_pi_slave_i2c_BufferIndex < THUNDIPI_SLAVE_I2C_BUFFER_SIZE) {
 					// write new data to target address; auto increment target address
-					printf(">WROTE DATA %d %d %d\r\n\n",thundi_pi_slave_i2c_Buffer,thundi_pi_slave_i2c_BufferIndex,rxData);
+					//printf(">WROTE DATA %d %d %d\r\n\n",thundi_pi_slave_i2c_Buffer,thundi_pi_slave_i2c_BufferIndex,rxData);
 					thundi_pi_slave_i2c_Buffer[thundi_pi_slave_i2c_BufferIndex++] = rxData;
 					I2C1->CMD = I2C_CMD_ACK;
 				} else {
@@ -199,6 +199,10 @@ void thundipi_write_passkey_to_mem(uint32_t passkey) {
 	uint32_t passkey_network_order=__htonl(passkey);
 	memcpy(thundi_pi_slave_i2c_Buffer+THUNDIPI_SLAVE_I2C_OUR_PASSKEY_OFFSET,&passkey_network_order,sizeof(uint32_t));
 }
+
+uint8_t * thundipi_read_addr() {
+	return thundi_pi_slave_i2c_Buffer+THUNDIPI_SLAVE_I2C_MASTER_BLE_ADDR_OFFSET;
+}
 #endif
 
 
@@ -214,11 +218,15 @@ uint16_t thundipi_read_id(struct I2C_THUNDIPII2C * sensor) {
 }
 
 void thundipi_write_passkey(struct I2C_THUNDIPII2C * sensor, uint32_t passkey) {
-  sl_status_t ret=i2c_write_data_uint32(sensor->i2cspm, sensor->m_i2cAddress,THUNDIPI_SLAVE_I2C_THEIR_PASSKEY_OFFSET, passkey);
+   i2c_write_data_uint32(sensor->i2cspm, sensor->m_i2cAddress,THUNDIPI_SLAVE_I2C_THEIR_PASSKEY_OFFSET, passkey);
+}
+void thundipi_write_address(struct I2C_THUNDIPII2C * sensor, uint8_t * address) {
+	i2c_write_data(sensor->i2cspm, sensor->m_i2cAddress,
+			THUNDIPI_SLAVE_I2C_MASTER_BLE_ADDR_OFFSET, 6, address);
 }
 uint32_t thundipi_read_passkey(struct I2C_THUNDIPII2C * sensor) {
 	uint32_t passkey=0;
-   sl_status_t ret=i2c_read_data_uint32(sensor->i2cspm, sensor->m_i2cAddress,THUNDIPI_SLAVE_I2C_OUR_PASSKEY_OFFSET, &passkey);
+   i2c_read_data_uint32(sensor->i2cspm, sensor->m_i2cAddress,THUNDIPI_SLAVE_I2C_OUR_PASSKEY_OFFSET, &passkey);
    return passkey;
 }
 
