@@ -6,6 +6,7 @@
 #include "sl_i2cspm_instances.h"
 #include "INA3221.h"
 #include "i2c_utils.h"
+#include <machine/endian.h>
 
 /**************************************************************************/
 /*!
@@ -26,7 +27,8 @@ sl_status_t sl_ina3221_set_config(struct I2C_INA3221 * sensor)  {
                     INA3221_CONFIG_MODE_2 |
                     INA3221_CONFIG_MODE_1 |
                     INA3221_CONFIG_MODE_0;
-  return i2c_write_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_CONFIG, config);
+  sl_status_t sc= i2c_write_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_CONFIG, __htons(config));
+  return sc;
 
 }
 
@@ -45,23 +47,19 @@ void sl_ina3221_init(struct I2C_INA3221 * sensor, uint8_t i2c_addr, float shunt_
 */
 /**************************************************************************/
 
-int16_t from_twos(uint16_t twos) {
-  if((twos>>15 && 0x01) == 1)   {
-      twos = ~(twos & 0x7FFF) + 1;
-  }
-  return twos;
-}
 
-double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
-  uint16_t value;
+float INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel) {
+  int16_t value;
 
   sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
 
   if (ret != SL_STATUS_OK) {
 	  return -1.0;
   }
-  double value_f=value>>3;
-  return value_f*0.000004;
+
+  double value_f=(double)(value>>3); // last three bits are not useful
+  value_f*=0.04; // 40uV is LSB, 40uV = 0.04mV
+  return value_f;
 }
 
 
@@ -71,7 +69,7 @@ double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
 */
 /**************************************************************************/
 
-double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
+float INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
   sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
@@ -80,8 +78,9 @@ double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
       return -1.0;
   }
 
-  double value_f=value>>3;
-  return value_f*0.008;
+  double value_f=(double)(value>>3); // last three bits are not useful
+  value_f*=0.008;  // LSB 8mV
+  return value_f;
 }
 
 /**************************************************************************/
@@ -90,8 +89,11 @@ double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
             config settings and current LSB
 */
 /**************************************************************************/
-double INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel) {
-    return INA3221_getShuntVoltageV(sensor, channel)/sensor->shunt_resistor_value;
+float INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel) {
+	float shunt_voltage_mv=INA3221_getShuntVoltage_mV(sensor, channel);
+	float current_mA =  shunt_voltage_mv/sensor->shunt_resistor_value;
+	//printf("Current %d \r\n\n",(int)(current_mA));
+    return current_mA;
 }
 
 

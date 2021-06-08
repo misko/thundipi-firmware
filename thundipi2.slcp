@@ -19,9 +19,9 @@ source:
 project_name: thundipi2
 quality: production
 component:
-- {id: BGM220SC22WGA}
 - {id: iostream_retarget_stdio}
 - {id: iostream_swo}
+- {id: BGM220PC22WGA}
 - {id: mpu}
 - instance: [INA3221, THUNDIPII2C]
   id: i2cspm

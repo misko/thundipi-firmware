@@ -24,6 +24,15 @@
         <read authenticated="false" bonded="false" encrypted="false"/>
       </properties>
     </characteristic>
+    
+    <!--Height-->
+    <characteristic const="false" id="height" name="Height" sourceId="org.bluetooth.characteristic.height" uuid="2A8E">
+      <informativeText>Abstract: Height of the User </informativeText>
+      <value length="2" type="hex" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
   </service>
   
   <!--Device Information-->

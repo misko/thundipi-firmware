@@ -30,7 +30,11 @@ static const struct sli_bgapi_class * const bt_class_table[] =
 
 void sl_bt_init(void)
 {
-  sl_bt_init_stack(&config);
+  // Stack initialization could fail, e.g., due to out of memory.
+  // The failure could not be returned to user yet as the system initialization
+  // does not return an error code.
+  sl_status_t err = sl_bt_init_stack(&config);
+  (void) err;
   sl_bt_init_classes(bt_class_table);
 }
 
@@ -55,8 +59,11 @@ void sl_bt_step(void)
 {
   sl_bt_msg_t evt;
 
-  // check if application can process a new event.
-  if (!sl_bt_can_process_event(SL_BGAPI_MSG_HEADER_LEN + SL_BGAPI_MAX_PAYLOAD_SIZE)) {
+  sl_bt_run();
+  uint32_t event_len = sl_bt_event_pending_len();
+  // For preventing from data loss, the event will be kept in the stack's queue
+  // if application cannot process it at the moment.
+  if ((event_len == 0) || (!sl_bt_can_process_event(event_len))) {
     return;
   }
 

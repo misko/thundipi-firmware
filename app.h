@@ -62,12 +62,9 @@ enum APP_STATE {
 #define PIN_SET 0
 #define PIN_UNSET 1
 
-#define RELAY_DLAY_MSEC 20
-#define BUTTON_DLAY_MSEC 150
-#define AMP_DLAY_MSEC 1000
-#define I2C_DLAY_MSEC 5000
-#define PASSKEY_DLAY_MSEC 1000
+
 #define PASSKEY_CHECKS 10
+
 
 
 /**************************************************************************//**

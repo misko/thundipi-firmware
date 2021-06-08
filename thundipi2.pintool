@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="ASCII"?>
-<device:XMLDevice xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:device="http://www.silabs.com/ss/hwconfig/document/device.ecore" name="pin_tool.BGM220SC22WGA" partId="mcu.arm.efr32.bg22.bgm220sc22wga" contextId="com.silabs.sdk.stack.super:3.1.1._1914541083">
+<device:XMLDevice xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:device="http://www.silabs.com/ss/hwconfig/document/device.ecore" name="pin_tool.BGM220PC22WGA" partId="mcu.arm.efr32.bg22.bgm220pc22wga" contextId="com.silabs.sdk.stack.super:3.1.2._1914541083">
   <mode name="DefaultMode">
     <property object="DefaultMode" propertyId="mode.diagramLocation" value="100, 100"/>
     <property object="GPIO" propertyId="ABModule.selectedRequirement" value="gpio%T%SL_DEBUG%T%sl_debug_swo_config.h"/>
@@ -33,8 +33,6 @@
     <property object="PC03" propertyId="pin.reserve" value="Reserved"/>
     <property object="PC06" propertyId="pin.name" value="RELAY3_SET"/>
     <property object="PC06" propertyId="pin.reserve" value="Reserved"/>
-    <property object="PD00" propertyId="pin.name" value="RELAY1_SET"/>
-    <property object="PD00" propertyId="pin.reserve" value="Reserved"/>
     <property object="PD01" propertyId="pin.name" value="RELAY1_UNSET"/>
     <property object="PD01" propertyId="pin.reserve" value="Reserved"/>
     <property object="PORTIO" propertyId="portio.gpio.enable.swclk" value="Enabled"/>

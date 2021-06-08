@@ -41,7 +41,6 @@
 /*=========================================================================
     CONVERSION DELAY (in mS)
     -----------------------------------------------------------------------*/
-#define INA3221_CONVERSIONDELAY (1) ///< Conversion delay
 /*=========================================================================*/
 
 #define INA3221_MANUFACTURER_ID 0xFE
@@ -112,9 +111,9 @@ struct I2C_INA3221 {
 
 void sl_ina3221_init(struct I2C_INA3221 * sensor, uint8_t i2c_addr, float shunt_resistor_value);
 
-double INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel);
-double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel);
-double INA3221_getShuntVoltageV(struct I2C_INA3221 * sensor, uint8_t channel);
+float INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel);
+float INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel);
+float INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel);
 
 
 

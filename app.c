@@ -16,6 +16,10 @@
 #include <THUNDIPII2C.h>
 #include "pin_config.h"
 #include "app.h"
+#include "button.h"
+#include "timers.h"
+#include "relay.h"
+#include "stats.h"
 
 static uint8_t live_connections = 0;
 static connection connections[8];
@@ -23,9 +27,6 @@ static connection connections[8];
 static const uint8_t UUID_SERVICE[2] = { 0x15, 0x18 }; // backwards
 static const uint8_t UUID_RELAY_CHAR[2] = { 0x56, 0x2A }; // backwards
 
-static uint8_t relay_state[NRELAYS] = { 0, 0, 0 };
-static uint8_t relay_changing[NRELAYS] = { 0, 0, 0 };
-static uint8_t button_debounce_state[NRELAYS] = { 0, 0, 0 };
 
 static int app_state = IDLE;
 
@@ -39,40 +40,13 @@ static uint32_t _service_handle = 0;
 static uint16_t _char_handle = 0;
 static uint8_t _conn_handle = 0;
 
-static sl_sleeptimer_timer_handle_t button_debounce_timers[NBUTTONS];
-static sl_sleeptimer_timer_handle_t relay_timers[NRELAYS];
-static sl_sleeptimer_timer_handle_t amp_notify_timer;
-static sl_sleeptimer_timer_handle_t i2c_check_timer;
-static sl_sleeptimer_timer_handle_t passkey_check_timer;
 
-static uint32_t relay_delay_ticks = 0;
-static uint32_t button_delay_ticks = 0;
-static uint32_t amp_delay_ticks = 0;
-static uint32_t i2c_delay_ticks = 0;
-static uint32_t passkey_delay_ticks = 0;
 
 static uint16_t passkey_repeats=0;
 
 
 bd_addr address;
 
-static void
-relay_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
-static void
-button_debounce_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
-static void
-amp_notify_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
-static void
-i2c_check_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
-static void
-passkey_check_timer_callback(sl_sleeptimer_timer_handle_t *handle, void *data);
-
-static void
-button_change(uint8_t idx);
-static void
-button_to_port_and_pin(int button, int *port, int *pin);
-static void
-channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin);
 
 static void
 aio_digital_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
@@ -81,157 +55,15 @@ aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_request_t *data);
 static void
 aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
 
-static void relay_off(int idx);
-static void relay_on(int idx);
-static void relay_toggle(int idx);
 
-/**************************************************************************//**
- * Timers
- *****************************************************************************/
-static void relay_timer_callback(sl_sleeptimer_timer_handle_t *handle,
-		void *data) {
-	(void) handle;
-	int relay_idx = (int) data;
-	int pin, port;
-	channel_to_port_and_pin(relay_idx, PIN_UNSET, &port, &pin);
-	GPIO_PinOutClear(port, pin);
-	channel_to_port_and_pin(relay_idx, PIN_SET, &port, &pin);
-	GPIO_PinOutClear(port, pin);
-	relay_changing[relay_idx] = 0;
-}
 
-static void button_debounce_timer_callback(sl_sleeptimer_timer_handle_t *handle,
-		void *data) {
-	(void) handle;
-	int button_idx = (int) data;
-	button_debounce_state[button_idx] = 0;
-}
-
-static void amp_notify_timer_callback(sl_sleeptimer_timer_handle_t *handle,
-		void *data) {
-	(void) data;
-	(void) handle;
-	//TODO optimize to only if current changes
-	sl_bt_external_signal(SIGNAL_AMP_NOTIFY);
-}
-
-static void i2c_check_timer_callback(sl_sleeptimer_timer_handle_t *handle,
-		void *data) {
-	(void) data;
-	(void) handle;
-	//TODO optimize to only if current changes
-	sl_bt_external_signal(SIGNAL_I2C_CHECK);
-}
-
-static void passkey_check_timer_callback(sl_sleeptimer_timer_handle_t *handle,
-		void *data) {
-	(void) data;
-	(void) handle;
-	//TODO optimize to only if current changes
-	sl_bt_external_signal(SIGNAL_PASSKEY_CHECK);
-}
-
-/**************************************************************************//**
- * Button handling
- *****************************************************************************/
-
-void button_to_port_and_pin(int button, int *port, int *pin) {
-	switch (button) {
-	case 0:
-		*port = BUTTON1_PORT;
-		*pin = BUTTON1_PIN;
-		break;
-	default:
-		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid button\n", button);
-	}
-
-}
-void channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin) {
-	switch (channel) {
-	case 0:
-		if (pin_type == PIN_SET) {
-			*port = RELAY1_SET_PORT;
-			*pin = RELAY1_SET_PIN;
-		} else {
-			*port = RELAY1_UNSET_PORT;
-			*pin = RELAY1_UNSET_PIN;
-		}
-		break;
-	case 1:
-		if (pin_type == PIN_SET) {
-			*port = RELAY2_SET_PORT;
-			*pin = RELAY2_SET_PIN;
-		} else {
-			*port = RELAY2_UNSET_PORT;
-			*pin = RELAY2_UNSET_PIN;
-		}
-		break;
-	case 2:
-		if (pin_type == PIN_SET) {
-			*port = RELAY3_SET_PORT;
-			*pin = RELAY3_SET_PIN;
-		} else {
-			*port = RELAY3_UNSET_PORT;
-			*pin = RELAY3_UNSET_PIN;
-		}
-		break;
-	default:
-		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid channel\n", channel);
-	}
-}
-
-static void button_change(uint8_t idx) {
-	int port, pin;
-	button_to_port_and_pin(idx, &port, &pin);
-	int state = GPIO_PinInGet(port, pin);
-	if (state == 0) {
-		//debounce it
-		if (button_debounce_state[idx] == 1) {
-			return;
-		}
-		button_debounce_state[idx] = 1;
-		sl_sleeptimer_start_timer(button_debounce_timers + idx,
-				button_delay_ticks, button_debounce_timer_callback,
-				(void*) (int) idx, 0, 0);
-
-#if T_TYPE == T_RELAY
-		switch (idx) {
-		case 0:
-			relay_toggle(0);
-			break;
-		case 1:
-			relay_toggle(1);
-			break;
-		case 2:
-			relay_toggle(2);
-			break;
-		case 3:
-
-			sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
-
-			break;
-		default:
-			break;
-		}
-#else
-		sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
-		int state = GPIO_PinInGet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		printf("STATE IS %d\r\n\n", state);
-		if (state == 1) {
-			GPIO_PinOutClear(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		} else {
-
-			GPIO_PinOutSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		}
-#endif
-	}
-}
 
 /**************************************************************************//**
  * App BT
  *****************************************************************************/
 SL_WEAK void app_init(void) {
 	printf("IN INIT x1\r\n\n");
+	init_stats();
 	int pin, port;
 #if T_TYPE == T_RELAY
 	for (int idx = 0; idx < NRELAYS; idx++) {
@@ -241,10 +73,11 @@ SL_WEAK void app_init(void) {
 		GPIO_PinModeSet(port, pin, gpioModePushPull, 0);
 	}
 	sl_ina3221_init(&ina3221_sensor, INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
-	sl_thundipii2c_init(&thundipii2c_sensor, THUNDIPII2C_ADDRESS);
 
-	uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
-	printf("THUNID IID GOT ID %x\r\n\n", thundi_id);
+	//sl_thundipii2c_init(&thundipii2c_sensor, THUNDIPII2C_ADDRESS);
+
+	//uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
+	//printf("THUNID IID GOT ID %x\r\n\n", thundi_id);
 
 #elif T_TYPE == T_SWITCH
 	GPIO_PinModeSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN, gpioModePushPull, 0);
@@ -261,29 +94,8 @@ SL_WEAK void app_init(void) {
 		GPIOINT_CallbackRegister(idx, (GPIOINT_IrqCallbackPtr_t) button_change);
 		GPIO_ExtIntConfig(port, pin, idx, false, true, true);
 	}
-	sl_sleeptimer_init();
-	relay_delay_ticks = ((uint64_t) RELAY_DLAY_MSEC
-			* sl_sleeptimer_get_timer_frequency()) / 1000;
-	button_delay_ticks = ((uint64_t) BUTTON_DLAY_MSEC
-			* sl_sleeptimer_get_timer_frequency()) / 1000;
-	amp_delay_ticks = ((uint64_t) AMP_DLAY_MSEC
-			* sl_sleeptimer_get_timer_frequency()) / 1000;
-	i2c_delay_ticks = ((uint64_t) I2C_DLAY_MSEC
-			* sl_sleeptimer_get_timer_frequency()) / 1000;
-	passkey_delay_ticks = ((uint64_t) PASSKEY_DLAY_MSEC
-			* sl_sleeptimer_get_timer_frequency()) / 1000;
 
-
-
-#if T_TYPE == T_RELAY
-	sl_sleeptimer_start_periodic_timer(&amp_notify_timer,
-			amp_delay_ticks, amp_notify_timer_callback,
-			NULL, 0, 0);
-#endif
-
-	sl_sleeptimer_start_periodic_timer(&i2c_check_timer,
-			i2c_delay_ticks, i2c_check_timer_callback,
-			NULL, 0, 0);
+	init_timers();
 }
 
 SL_WEAK void app_process_action(void) {
@@ -360,54 +172,7 @@ static void aio_digital_out_write_cb_all(
 
 }
 
-/**************************************************************************//**
- * Relay control
- *****************************************************************************/
-static void relay_off(int idx) {
-	CORE_DECLARE_IRQ_STATE;
-	CORE_ENTER_ATOMIC();
-	if (relay_changing[idx] == 1) {
-		CORE_EXIT_ATOMIC();
-		return;
-	}
-	relay_changing[idx] = 1;
-	CORE_EXIT_ATOMIC();
-	int port = 0;
-	int pin = 0;
-	channel_to_port_and_pin(idx, PIN_UNSET, &port, &pin);
-	GPIO_PinOutSet(port, pin);
-	sl_sleeptimer_start_timer(relay_timers + idx, relay_delay_ticks,
-			relay_timer_callback, (void*) (int) idx, 0, 0);
-	relay_state[idx] = 0;
 
-	sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
-}
-static void relay_on(int idx) {
-	CORE_DECLARE_IRQ_STATE;
-	CORE_ENTER_ATOMIC();
-	if (relay_changing[idx] == 1) {
-		CORE_EXIT_ATOMIC();
-		return;
-	}
-	relay_changing[idx] = 1;
-	CORE_EXIT_ATOMIC();
-	int port = 0;
-	int pin = 0;
-	channel_to_port_and_pin(idx, PIN_SET, &port, &pin);
-	GPIO_PinOutSet(port, pin);
-	sl_sleeptimer_start_timer(relay_timers + idx, relay_delay_ticks,
-			relay_timer_callback, (void*) (int) idx, 0, 0);
-	relay_state[idx] = 1;
-
-	sl_bt_external_signal(SIGNAL_RELAY_NOTIFY);
-}
-static void relay_toggle(int idx) {
-	if (relay_state[idx] == 1) {
-		relay_off(idx);
-	} else {
-		relay_on(idx);
-	}
-}
 
 /**************************************************************************//**
  * Misc
@@ -643,8 +408,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		thundipi_write_passkey_to_mem(bt_bonding_passkey);
 #endif
 		passkey_repeats=PASSKEY_CHECKS;
-		sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
-				passkey_check_timer_callback, (void*)0x0, 0, 0);
+		start_passkey_timer();
 
 
 		//sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,	1);
@@ -844,7 +608,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			s[0] = INA3221_getBusVoltageV(&ina3221_sensor, 1);
 			s[1] = INA3221_getBusVoltageV(&ina3221_sensor, 2);
 			s[2] = INA3221_getBusVoltageV(&ina3221_sensor, 3);
-			printf("volts2 %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
+			printf("volts2 %d %d %d\r\n\n", (int)(100*s[0]), (int)(100*s[1]), (int)(100*s[2]));
 
 			s[0] = INA3221_getCurrentA(&ina3221_sensor, 1);
 			s[1] = INA3221_getCurrentA(&ina3221_sensor, 2);
@@ -911,8 +675,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 				printf("Trying to bonding\r\n\n", slave_passkey); //TODO PHONE BONDING HERE!
 				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
 			} else if ((passkey_repeats--)>0) {
-				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
-						passkey_check_timer_callback, (void*)0x0, 0, 0);
+				start_passkey_timer();
 			}
 #endif
 

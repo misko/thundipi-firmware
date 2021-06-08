@@ -104,6 +104,7 @@ sl_status_t i2c_write_data(sl_i2cspm_t *i2cspm, uint8_t i2c_addr,
 	ret = I2CSPM_Transfer(i2cspm, &seq);
 
 	if (ret != i2cTransferDone) {
+		printf("ERROR ON SEND!\n");
 		retval = SL_STATUS_TRANSMIT;
 	}
 	return retval;

@@ -1,0 +1,9 @@
+PWM dimming LED
+Battery (write to flash on low)
+SPI memory option
+BLE sync to phone with passcode
+Always plugged in option for pannel (make sure I2C doesnt keep going)
+Remote operation
+Case enclosure
+OTA update
+5V 12v power indicator
