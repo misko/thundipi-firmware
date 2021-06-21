@@ -30,7 +30,11 @@
 #include <stdbool.h>
 #include "sl_status.h"
 #include "sl_i2cspm.h"
+#include "app.h"
 
+extern double currents[NRELAYS];
+extern double voltages[NRELAYS];
+extern double power[NRELAYS];
 
 /*=========================================================================
     I2C ADDRESS/BITS
@@ -111,10 +115,11 @@ struct I2C_INA3221 {
 
 void sl_ina3221_init(struct I2C_INA3221 * sensor, uint8_t i2c_addr, float shunt_resistor_value);
 
-float INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel);
-float INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel);
-float INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel);
+double INA3221_getCurrentmA(struct I2C_INA3221 * sensor, uint8_t channel);
+double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel);
+double INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel);
 
+double INA3221_accumulate_mW(struct I2C_INA3221 * sensor, uint8_t channel);
 
 
 

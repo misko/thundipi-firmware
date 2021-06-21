@@ -8,6 +8,11 @@
 #include "i2c_utils.h"
 #include <machine/endian.h>
 
+
+double currents[NRELAYS];
+double voltages[NRELAYS];
+double power[NRELAYS];
+
 /**************************************************************************/
 /*!
     @file     INA3221.c
@@ -48,7 +53,7 @@ void sl_ina3221_init(struct I2C_INA3221 * sensor, uint8_t i2c_addr, float shunt_
 /**************************************************************************/
 
 
-float INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel) {
+double INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel) {
   int16_t value;
 
   sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_SHUNTVOLTAGE_1+(channel -1) *2, &value);
@@ -69,7 +74,7 @@ float INA3221_getShuntVoltage_mV(struct I2C_INA3221 * sensor, uint8_t channel) {
 */
 /**************************************************************************/
 
-float INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
+double INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
   uint16_t value;
 
   sl_status_t ret=i2c_read_data_uint16(sensor->i2cspm, sensor->m_i2cAddress, INA3221_REG_BUSVOLTAGE_1+(channel -1) *2, &value);
@@ -89,12 +94,23 @@ float INA3221_getBusVoltageV(struct I2C_INA3221 * sensor, uint8_t channel) {
             config settings and current LSB
 */
 /**************************************************************************/
-float INA3221_getCurrentA(struct I2C_INA3221 * sensor, uint8_t channel) {
-	float shunt_voltage_mv=INA3221_getShuntVoltage_mV(sensor, channel);
-	float current_mA =  shunt_voltage_mv/sensor->shunt_resistor_value;
-	//printf("Current %d \r\n\n",(int)(current_mA));
+double INA3221_getCurrentmA(struct I2C_INA3221 * sensor, uint8_t channel) {
+	double shunt_voltage_mv=INA3221_getShuntVoltage_mV(sensor, channel);
+	double current_mA =  shunt_voltage_mv/sensor->shunt_resistor_value;
+	//printf("%d : Current %d \r\n\n",channel,(int)(current_mA));
     return current_mA;
 }
 
+double INA3221_accumulate_mW(struct I2C_INA3221 * sensor, uint8_t channel) {
+  voltages[channel-1] = INA3221_getBusVoltageV(sensor, channel);
+  currents[channel-1] = INA3221_getCurrentmA(sensor, channel);
+  double this_watts=voltages[channel-1]*currents[channel-1];
+  power[channel-1]+=this_watts;
+  //printf("POWER %d on channel %d\r\n\n",((int)(10*this_watts)),channel);
+  if (this_watts>10 || this_watts<-10) {
+	  //printf("WTF\r\n\n");
+  }
+  return power[channel-1];
+}
 
 

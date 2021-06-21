@@ -2,13 +2,13 @@
 #include "em_common.h"
 #include "relay.h"
 #include "app.h"
-
+#include "button.h"
+#include "timers.h"
 #include "em_gpio.h"
 #include "sl_app_assert.h"
 
 uint8_t relay_state[NRELAYS] = { 0, 0, 0 };
 uint8_t relay_changing[NRELAYS] = { 0, 0, 0 };
-uint8_t button_debounce_state[NRELAYS] = { 0, 0, 0 };
 
 /**************************************************************************//**
  * Relay control

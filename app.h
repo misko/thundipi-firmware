@@ -39,10 +39,18 @@ enum RELAY_STATE {
 enum APP_STATE {
   IDLE,
   RELAY_SERVE,
+  RELAY_PAIR,
+  RELAY_CONFIRM,
   SWITCH_I2C_WAIT,
   SWITCH_SCAN,
   SWITCH_GET_SERVICE,
-  SWITCH_GET_CHAR
+  SWITCH_GET_CHAR,
+  SWITCH_SERVE,
+};
+
+enum I2C_THUNDI_STATE {
+	I2C_THUNDI_CONNECTED,
+	I2C_THUNDI_DISCONNECTED
 };
 
 #define PI_DEBUG 1
@@ -51,6 +59,11 @@ enum APP_STATE {
 #define SIGNAL_SWITCH_TOGGLE 0x4
 #define SIGNAL_I2C_CHECK 0x8
 #define SIGNAL_PASSKEY_CHECK 0x10
+#define SIGNAL_MONITOR 0x20
+#define SIGNAL_NVM_SAVE 0x40
+#define SIGNAL_PRESS_HOLD 0x80
+#define SIGNAL_SETUP_TIMEOUT 0x0100
+#define SIGNAL_PASSKEY_ACCEPT 0x0200
 
 #define NRELAYS 3
 #define NBUTTONS 1
@@ -65,7 +78,7 @@ enum APP_STATE {
 
 #define PASSKEY_CHECKS 10
 
-
+extern int app_state;
 
 /**************************************************************************//**
  * Application Init.
@@ -76,7 +89,8 @@ void app_init(void);
  * Application Process Action.
  *****************************************************************************/
 void app_process_action(void);
-
+void set_discoverable();
+void unset_discoverable();
 
 
 

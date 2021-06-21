@@ -4,6 +4,11 @@
 
 #include "sl_app_assert.h"
 #include "app.h"
+
+
+uint8_t button_debounce_state[NRELAYS] = { 0, 0, 0 };
+uint8_t button_state[NRELAYS] = { 255, 255, 255 };
+
 /**************************************************************************//**
  * Button handling
  *****************************************************************************/
@@ -53,18 +58,14 @@ void channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin) {
 	}
 }
 
-void button_change(uint8_t idx) {
-	int port, pin;
-	button_to_port_and_pin(idx, &port, &pin);
-	int state = GPIO_PinInGet(port, pin);
-	if (state == 0) {
-		//debounce it
-		if (button_debounce_state[idx] == 1) {
+void button_debounce_change(uint8_t idx) {
+	if (button_state[idx] == 0) {
+		if (app_state==RELAY_CONFIRM) {
+			printf("CONFIRM the bonding\r\n\n");
+			sl_bt_external_signal(SIGNAL_PASSKEY_ACCEPT);
 			return;
 		}
-		button_debounce_state[idx] = 1;
-
-		start_debounce_timer(idx);
+		start_press_hold_timer();
 
 #if T_TYPE == T_RELAY
 		switch (idx) {
@@ -96,5 +97,21 @@ void button_change(uint8_t idx) {
 			GPIO_PinOutSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
 		}
 #endif
+	} else {
+		stop_press_hold_timer();
+	}
+}
+
+void button_change(uint8_t idx) {
+	int port, pin;
+	button_to_port_and_pin(idx, &port, &pin);
+	int state = GPIO_PinInGet(port, pin);
+	//printf("STATE IS %d\r\n\n",state);
+	if (button_debounce_state[idx]!=1 || state!=button_state[idx]) {
+		//start a debounce for this state
+		stop_debounce_timer(idx);
+		button_state[idx]=state;
+		button_debounce_state[idx]=1;
+		start_debounce_timer(idx);
 	}
 }

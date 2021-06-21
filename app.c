@@ -27,8 +27,8 @@ static connection connections[8];
 static const uint8_t UUID_SERVICE[2] = { 0x15, 0x18 }; // backwards
 static const uint8_t UUID_RELAY_CHAR[2] = { 0x56, 0x2A }; // backwards
 
-
-static int app_state = IDLE;
+int app_state = IDLE;
+int i2c_thundi_state = I2C_THUNDI_DISCONNECTED;
 
 // The advertising set handle allocated from Bluetooth stack.
 static uint8_t advertising_set_handle = 0xff;
@@ -40,13 +40,12 @@ static uint32_t _service_handle = 0;
 static uint16_t _char_handle = 0;
 static uint8_t _conn_handle = 0;
 
+static uint16_t passkey_repeats = 0;
 
-
-static uint16_t passkey_repeats=0;
-
+double currents[NRELAYS];
+double voltages[NRELAYS];
 
 bd_addr address;
-
 
 static void
 aio_digital_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
@@ -54,9 +53,6 @@ static void
 aio_digital_out_write_cb_all(sl_bt_evt_gatt_server_user_write_request_t *data);
 static void
 aio_analog_out_read_cb_all(sl_bt_evt_gatt_server_user_read_request_t *data);
-
-
-
 
 /**************************************************************************//**
  * App BT
@@ -74,13 +70,13 @@ SL_WEAK void app_init(void) {
 	}
 	sl_ina3221_init(&ina3221_sensor, INA3221_ADDRESS, 0.005); //LVK25 , 0.005 tol 0.5%
 
-	//sl_thundipii2c_init(&thundipii2c_sensor, THUNDIPII2C_ADDRESS);
+	sl_thundipii2c_init(&thundipii2c_sensor, THUNDIPII2C_ADDRESS);
 
 	//uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
 	//printf("THUNID IID GOT ID %x\r\n\n", thundi_id);
 
-#elif T_TYPE == T_SWITCH
 	GPIO_PinModeSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN, gpioModePushPull, 0);
+#elif T_TYPE == T_SWITCH
 	thundipi_slave_initI2C();
 #endif
 
@@ -92,8 +88,10 @@ SL_WEAK void app_init(void) {
 		//printf("SETTING pin %d port %d\r\n\n",pin,port);
 		GPIO_PinModeSet(port, pin, gpioModeInput, 1);
 		GPIOINT_CallbackRegister(idx, (GPIOINT_IrqCallbackPtr_t) button_change);
-		GPIO_ExtIntConfig(port, pin, idx, false, true, true);
+		GPIO_ExtIntConfig(port, pin, idx, true, true, true);
 	}
+
+	GPIO_PinModeSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN, gpioModePushPull, 0);
 
 	init_timers();
 }
@@ -132,18 +130,10 @@ static void aio_analog_out_read_cb_all(
 		sl_bt_evt_gatt_server_user_read_request_t *data) {
 	sl_status_t sc;
 	double s[NRELAYS];
-	s[0] = INA3221_getBusVoltageV(&ina3221_sensor, 1);
-	s[1] = INA3221_getBusVoltageV(&ina3221_sensor, 2);
-	s[2] = INA3221_getBusVoltageV(&ina3221_sensor, 3);
-	printf("VOLTAGES %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
-	s[0] = INA3221_getCurrentA(&ina3221_sensor, 1);
-	s[1] = INA3221_getCurrentA(&ina3221_sensor, 2);
-	s[2] = INA3221_getCurrentA(&ina3221_sensor, 3);
-	printf("CURRENTS %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
 
 	sc = sl_bt_gatt_server_send_user_read_response(data->connection,
 			data->characteristic, 0, sizeof(double) * NRELAYS,
-			(const uint8_t*) s,
+			(const uint8_t*) currents,
 			NULL);
 	sl_app_assert(sc == SL_STATUS_OK,
 			"[E: 0x%04x] Failed to send user read response\n", (int )sc);
@@ -172,18 +162,16 @@ static void aio_digital_out_write_cb_all(
 
 }
 
-
-
 /**************************************************************************//**
  * Misc
  *****************************************************************************/
 //ary must be len 18 at least
-void bd_addr_to_char(bd_addr addr, char *ary) {
+void bd_addr_to_char(uint8_t * addr, char *ary) {
 	for (uint8_t i = 0; i < 6; i++) {
 		/* Convert to hexadecimal (capital letters) with minimum width of 2 and '0' stuffing
 		 * More info on the sprintf parameters here: https://www.tutorialspoint.com/c_standard_library/c_function_sprintf.htm
 		 */
-		sprintf(&(ary[i * 3]), "%02X", addr.addr[i]);
+		sprintf(&(ary[i * 3]), "%02X", addr[i]);
 
 		/* Add the ':' character to overwrite the null terminator added by sprintf (except on the last iteration */
 		if (i < 5) {
@@ -193,12 +181,11 @@ void bd_addr_to_char(bd_addr addr, char *ary) {
 	ary[17] = '\0';
 }
 
-
 static int process_scan_response(sl_bt_evt_scanner_scan_report_t *response) {
 	// Decoding advertising packets is done here. The list of AD types can be found
 	// at: https://www.bluetooth.com/specifications/assigned-numbers/Generic-Access-Profile
 #if T_TYPE==T_SWITCH // switch only bonds over I2C
-	if (memcmp(response->address.addr,thundipi_read_addr(),6)!=0) { // not the right address
+	if (memcmp(response->address.addr,thundipi_read_master_addr(),6)!=0) { // not the right address
 		return 0;
 	}
 #endif
@@ -206,7 +193,7 @@ static int process_scan_response(sl_bt_evt_scanner_scan_report_t *response) {
 	int ad_type;
 	char name[32];
 	char addr[18];
-	bd_addr_to_char(response->address, addr);
+	bd_addr_to_char(response->address.addr, addr);
 	name[0] = '\0';
 	int found = 0;
 	//0x17  «Public Target Address» // TODO get the address too?
@@ -271,9 +258,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		app_state = SWITCH_I2C_WAIT;
 #endif
 		//sl_status_t sc = sl_bt_sm_set_passkey(1234);
-	    //sl_app_assert(sc == SL_STATUS_OK,
-	    //              "[E: 0x%04x] Failed to set using random passkeys\r\n",
-	    //              (int)sc);
+		//sl_app_assert(sc == SL_STATUS_OK,
+		//              "[E: 0x%04x] Failed to set using random passkeys\r\n",
+		//              (int)sc);
 		break;
 	case sl_bt_evt_scanner_scan_report_id:
 		if (process_scan_response(&(evt->data.evt_scanner_scan_report)) == 1) {
@@ -331,6 +318,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 #if T_TYPE == T_SWITCH
 			if (app_state == SWITCH_SCAN) {
 				app_state = SWITCH_GET_SERVICE;
+				printf("SEARCH FOR SERVICES!\r\n\n");
 				sl_bt_gatt_discover_primary_services_by_uuid(
 						evt->data.evt_connection_parameters.connection, 2,
 						UUID_SERVICE);
@@ -348,6 +336,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 		_service_handle = evt->data.evt_gatt_service.service;
 	}
+	printf("FOUND SERVIC %x %x \r\n\n",evt->data.evt_gatt_service.uuid.data[0],evt->data.evt_gatt_service.uuid.data[1]);
 		break;
 
 	case sl_bt_evt_gatt_characteristic_id:
@@ -366,6 +355,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			sl_bt_gatt_discover_characteristics_by_uuid(
 					evt->data.evt_gatt_procedure_completed.connection,
 					_service_handle, 2, UUID_RELAY_CHAR);
+		}
+		if (app_state==SWITCH_GET_CHAR) {
+			//printf("GOT THE SERV AND CHAR\r\n\n");
 		}
 		break;
 
@@ -395,6 +387,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		break;
 		// Event raised by the security manager when a passkey needs to be confirmed
 	case sl_bt_evt_sm_confirm_passkey_id:
+		app_state=RELAY_CONFIRM;
 		printf(
 				"Do you see this passkey on the other device: %06lu? (y/n)\r\n\n",
 				evt->data.evt_sm_confirm_passkey.passkey);
@@ -402,14 +395,13 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		bt_bonding_connection = evt->data.evt_sm_confirm_passkey.connection;
 
 #if T_TYPE==T_REALY
-		thundipi_write_passkey(&thundipii2c_sensor, bt_bonding_passkey) ;
+		thundipi_write_passkey(&thundipii2c_sensor, bt_bonding_passkey);
 #endif
 #if T_TYPE==T_SWITCH
 		thundipi_write_passkey_to_mem(bt_bonding_passkey);
 #endif
-		passkey_repeats=PASSKEY_CHECKS;
+		passkey_repeats = PASSKEY_CHECKS;
 		start_passkey_timer();
-
 
 		//sl_bt_sm_passkey_confirm(evt->data.evt_sm_confirm_passkey.connection,	1);
 		break;
@@ -417,6 +409,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		// Event raised when bonding is successful
 	case sl_bt_evt_sm_bonded_id:
 		printf("Bonded\r\n\n");
+#if T_TYPE == T_RELAY
+		unset_discoverable();
+		app_state=RELAY_SERVE;
+#endif
+
 		//printf("--------------------------------------\r\n\n");
 		// sl_bt_connection_close(_conn_handle); // not sure if we need this?
 		break;
@@ -604,21 +601,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
 			double s[NRELAYS];
 
-
-			s[0] = INA3221_getBusVoltageV(&ina3221_sensor, 1);
-			s[1] = INA3221_getBusVoltageV(&ina3221_sensor, 2);
-			s[2] = INA3221_getBusVoltageV(&ina3221_sensor, 3);
-			printf("volts2 %d %d %d\r\n\n", (int)(100*s[0]), (int)(100*s[1]), (int)(100*s[2]));
-
-			s[0] = INA3221_getCurrentA(&ina3221_sensor, 1);
-			s[1] = INA3221_getCurrentA(&ina3221_sensor, 2);
-			s[2] = INA3221_getCurrentA(&ina3221_sensor, 3);
-			printf("CURRENTS2 %0.6f %0.6f %0.6f\r\n\n", s[0], s[1], s[2]);
-
 			for (int i = 0; i < live_connections; i++) {
 				sl_bt_gatt_server_send_characteristic_notification(
 						connections[i].connection_handle,
-						gattdb_amps, sizeof(double) * NRELAYS, (uint8_t*)&s,
+						gattdb_amps, sizeof(double) * NRELAYS,
+						(uint8_t*) &currents,
 						NULL);
 				//sl_app_assert(sc == SL_STATUS_OK,
 				//		"[E: 0x%04x] Failed to send user notify\n", (int )sc);
@@ -628,11 +615,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 				& SIGNAL_RELAY_NOTIFY) {
 			for (int i = 0; i < live_connections; i++) {
 				sl_bt_gatt_server_send_characteristic_notification(
-						//0xFF,
-								connections[i].connection_handle,
-								gattdb_switch,
-								NRELAYS, (uint8_t*)&relay_state,
-								NULL);
+				//0xFF,
+						connections[i].connection_handle,
+						gattdb_switch,
+						NRELAYS, (uint8_t*) &relay_state,
+						NULL);
 				//sl_app_assert(sc == SL_STATUS_OK,
 				//		"[E: 0x%04x] Failed to send user notify\n", (int )sc);
 			}
@@ -649,32 +636,53 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			}
 			//printf("TOGGLE IS %d\r\n\n",sc);
 		}
-		if (evt->data.evt_system_external_signal.extsignals
-				& SIGNAL_I2C_CHECK) {
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_I2C_CHECK) {
 #if T_TYPE == T_RELAY
 			uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
-			if (thundi_id==0xF1E2) {
+			if (thundi_id == 0xF1E2 && i2c_thundi_state==I2C_THUNDI_DISCONNECTED) {
+				i2c_thundi_state=I2C_THUNDI_CONNECTED;
 				printf("Physically connected to thunidpi !\r\n\n");
 				thundipi_write_address(&thundipii2c_sensor, address.addr);
+				set_discoverable();
+				//read the other side address
+				uint8_t target_address[6];
+				char target_address_str[20];
+				thundipi_read_slave_address(&thundipii2c_sensor, target_address);
+				bd_addr_to_char(target_address,target_address_str);
+				printf("Remote ADDR %s\r\n\n",target_address_str);
+			} else {
+				i2c_thundi_state=I2C_THUNDI_DISCONNECTED;
 			}
 #endif
 
 #if T_TYPE == T_SWITCH
 			if (app_state==SWITCH_I2C_WAIT) {
+				uint8_t master_indicator=thundipi_read_master_indicator();
+				if (master_indicator==1) {
+					printf("MASTER INDICATOR FOUND!\r\n\n");
+				}
 				app_state=SWITCH_SCAN;
 				sl_bt_scanner_start(1, scanner_discover_generic);
 			}
 #endif
 		}
 		if (evt->data.evt_system_external_signal.extsignals
+				& SIGNAL_PASSKEY_ACCEPT) {
+			sl_bt_sm_passkey_confirm(bt_bonding_connection, 1);
+			printf("CONRIMGED\r\n\n");
+			passkey_repeats=0;
+			stop_passkey_timer();
+		}
+		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_PASSKEY_CHECK) {
 #if T_TYPE == T_RELAY
-			uint32_t slave_passkey=thundipi_read_passkey(&thundipii2c_sensor);
-			if (slave_passkey==bt_bonding_passkey) {
+			uint32_t slave_passkey = thundipi_read_passkey(&thundipii2c_sensor);
+			printf("READ PASSKEY FOM SLAVE %d vs %d \r\n\n",slave_passkey, bt_bonding_passkey);
+			if (slave_passkey == bt_bonding_passkey) {
 
 				printf("Trying to bonding\r\n\n", slave_passkey); //TODO PHONE BONDING HERE!
-				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
-			} else if ((passkey_repeats--)>0) {
+				sl_bt_sm_passkey_confirm(bt_bonding_connection, 1);
+			} else if ((passkey_repeats--) > 0) {
 				start_passkey_timer();
 			}
 #endif
@@ -686,18 +694,67 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 				sl_bt_sm_passkey_confirm(bt_bonding_connection,1);
 				printf("Trying to bonding!\r\n\n",bt_bonding_passkey,their_key);
 			} else if ((passkey_repeats--)>0) {
-				sl_sleeptimer_start_timer(&passkey_check_timer, passkey_delay_ticks,
-						passkey_check_timer_callback, (void*)0x0, 0, 0);
+				start_passkey_timer();
 			}
 #endif
 		}
+#if T_TYPE == T_RELAY
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_MONITOR) {
+			INA3221_accumulate_mW(&ina3221_sensor, 1);
+			INA3221_accumulate_mW(&ina3221_sensor, 2);
+			INA3221_accumulate_mW(&ina3221_sensor, 3);
 
+		}
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_NVM_SAVE) {
+			update_stats();
+			print_stats();
 
+		}
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_PRESS_HOLD) {
+			printf("HOLDING\r\n\n");
+			set_discoverable();
+		}
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_SETUP_TIMEOUT) {
+			printf("SETUP TIMEOUT\r\n\n");
+			unset_discoverable();
+		}
+#endif
 
+#if T_TYPE == T_SWITCH
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_PRESS_HOLD) {
+			printf("HOLDING\r\n\n");
+			//set_discoverable();
+		}
+#endif
 
 		break;
 		break;
 	}
+}
+
+void set_discoverable() {
+	//start_setup_led_timer();
+	app_state = RELAY_PAIR;
+	start_setup_timer();
+	// Set advertising interval to 100ms.
+	sl_status_t sc = sl_bt_advertiser_set_timing(advertising_set_handle, 160, // min. adv. interval (milliseconds * 1.6)
+			160, // max. adv. interval (milliseconds * 1.6)
+			0,   // adv. duration
+			0);  // max. num. adv. events
+	sl_app_assert(sc == SL_STATUS_OK,
+			"[E: 0x%04x] Failed to set advertising timing\n", (int )sc);
+	// Start general advertising and enable connections.
+	sc = sl_bt_advertiser_start(advertising_set_handle,
+			advertiser_general_discoverable,
+			advertiser_connectable_scannable);
+	sl_app_assert(sc == SL_STATUS_OK,
+			"[E: 0x%04x] Failed to start advertising\n", (int )sc);
+}
+
+void unset_discoverable() {
+	stop_setup_timer();
+	sl_bt_advertiser_stop(advertising_set_handle);
+	app_state = RELAY_SERVE;
 }
 
 /**************************************************************************//**
@@ -720,6 +777,10 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 
 		// Extract unique ID from BT Address.
 		sc = sl_bt_system_get_identity_address(&address, &address_type);
+#if T_TYPE==T_SWITCH
+		thundipi_write_slave_addr(address.addr);
+#endif
+
 		sl_app_assert(sc == SL_STATUS_OK,
 				"[E: 0x%04x] Failed to get Bluetooth address\n", (int )sc);
 #if T_TYPE==T_SWITCH
@@ -747,21 +808,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 		sc = sl_bt_advertiser_create_set(&advertising_set_handle);
 		sl_app_assert(sc == SL_STATUS_OK,
 				"[E: 0x%04x] Failed to create advertising set\n", (int )sc);
-#if T_TYPE==T_RELAY
-		// Set advertising interval to 100ms.
-		sc = sl_bt_advertiser_set_timing(advertising_set_handle, 160, // min. adv. interval (milliseconds * 1.6)
-				160, // max. adv. interval (milliseconds * 1.6)
-				0,   // adv. duration
-				0);  // max. num. adv. events
-		sl_app_assert(sc == SL_STATUS_OK,
-				"[E: 0x%04x] Failed to set advertising timing\n", (int )sc);
-		// Start general advertising and enable connections.
-		sc = sl_bt_advertiser_start(advertising_set_handle,
-				advertiser_general_discoverable,
-				advertiser_connectable_scannable);
-		sl_app_assert(sc == SL_STATUS_OK,
-				"[E: 0x%04x] Failed to start advertising\n", (int )sc);
-#endif
+
 		break;
 
 		// -------------------------------
@@ -777,20 +824,20 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 		// -------------------------------
 		// This event indicates that a connection was closed.
 	case sl_bt_evt_connection_closed_id:
-		// Restart advertising after client has disconnected.
-		sc = sl_bt_advertiser_start(advertising_set_handle,
+		/*/ Restart advertising after client has disconnected.
+		/sc = sl_bt_advertiser_start(advertising_set_handle,
 				advertiser_general_discoverable,
 				advertiser_connectable_scannable);
 		sl_app_assert(sc == SL_STATUS_OK,
-				"[E: 0x%04x] Failed to restart advertising 2\n", (int )sc);
+				"[E: 0x%04x] Failed to restart advertising 2\n", (int )sc);*/
 		break;
 
 	case sl_bt_evt_gatt_server_user_write_request_id:
-		printf("WRITE\n");
+		//printf("WRITE\n");
 		break;
 
 	case sl_bt_evt_gatt_server_user_read_request_id:
-		printf("READ\n");
+		//printf("READ\n");
 		break;
 
 		///////////////////////////////////////////////////////////////////////////

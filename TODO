@@ -1,5 +1,6 @@
 PWM dimming LED
 Battery (write to flash on low)
+NVM3 [ DONE ]
 SPI memory option
 BLE sync to phone with passcode
 Always plugged in option for pannel (make sure I2C doesnt keep going)
@@ -7,3 +8,8 @@ Remote operation
 Case enclosure
 OTA update
 5V 12v power indicator
+
+MOVE I2c TO separate bus!
+Convert to kwh instead of mws 
+
+caps on GPIO

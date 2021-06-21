@@ -53,7 +53,7 @@ int main(void) {
 		// Let the CPU go to sleep if the system allows it.
 #if T_TYPE == T_SWITCH
     if (!thundi_pi_slave_i2c_rxInProgress) {
-        sl_power_manager_sleep(); //BREAKS I2C SLAVE!
+        //sl_power_manager_sleep(); //BREAKS I2C SLAVE!
     }
 #else
 		sl_power_manager_sleep(); //BREAKS I2C SLAVE!

@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include "stats.h"
 #include "app.h"
+#include "timers.h"
 #include "nvm3_default.h"
+#include "INA3221.h"
 
 uint16_t stats_version;
 /*
@@ -38,14 +40,14 @@ void init_stats() {
 	stats_version=STATS_VERSION;
 	size_t num_obj = nvm3_countObjects(nvm3_defaultHandle);
 	printf("FOUND %d objects in NVM\r\n\n",num_obj);
-	if (num_obj==0) {
+	if (1==1 || num_obj==0) {
 		printf("SETTING UP NVM\r\n\n");
 		nvm3_writeData(nvm3_defaultHandle, STATS_VERSION_KEY, &stats_version, sizeof(uint16_t));
 		memset(life_accumulator,0,sizeof(double)*NRELAYS);
 		memset(trip_accumulator,0,sizeof(double)*NRELAYS);
 
-		nvm3_writeData(nvm3_defaultHandle, STATS_LIFE_ACCUMULATOR_KEY, &life_accumulator, sizeof(double)*NRELAYS);
-		nvm3_writeData(nvm3_defaultHandle, STATS_TRIP_ACCUMULATOR_KEY, &trip_accumulator, sizeof(double)*NRELAYS);
+		nvm3_writeData(nvm3_defaultHandle, STATS_LIFE_ACCUMULATOR_KEY, life_accumulator, sizeof(double)*NRELAYS);
+		nvm3_writeData(nvm3_defaultHandle, STATS_TRIP_ACCUMULATOR_KEY, trip_accumulator, sizeof(double)*NRELAYS);
 	}
 	num_obj = nvm3_countObjects(nvm3_defaultHandle);
 	read_stats();
@@ -53,6 +55,25 @@ void init_stats() {
 }
 
 void update_stats() {
-	nvm3_writeData(nvm3_defaultHandle, STATS_LIFE_ACCUMULATOR_KEY, &life_accumulator, sizeof(double)*NRELAYS);
-	nvm3_writeData(nvm3_defaultHandle, STATS_TRIP_ACCUMULATOR_KEY, &trip_accumulator, sizeof(double)*NRELAYS);
+	for (int i=0; i<NRELAYS; i++) {
+		double power_in_kwh = power[i]*MONITOR_DLAY_SEC/(60.0*60.0*1000.0);
+		life_accumulator[i]+=power_in_kwh;
+		trip_accumulator[i]+=power_in_kwh;
+		power[i]=0.0;
+	}
+	nvm3_writeData(nvm3_defaultHandle, STATS_LIFE_ACCUMULATOR_KEY, life_accumulator, sizeof(double)*NRELAYS);
+	nvm3_writeData(nvm3_defaultHandle, STATS_TRIP_ACCUMULATOR_KEY, trip_accumulator, sizeof(double)*NRELAYS);
+}
+
+void print_stats() {
+	for (int i=0; i<NRELAYS; i++)  {
+		int32_t x= life_accumulator[i];
+		printf("%d\t",x);
+	}
+	printf("\r\n\n");
+	for (int i=0; i<NRELAYS; i++)  {
+		int32_t x= trip_accumulator[i];
+		printf("%d\t",x);
+	}
+	printf("\r\n\n");
 }

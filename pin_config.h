@@ -14,8 +14,8 @@
 #define BUTTON1_PORT gpioPortC
 #define BUTTON1_PIN 3
 
-#define RELAY1_SET_PORT gpioPortD
-#define RELAY1_SET_PIN 0
+#define RELAY1_SET_PORT gpioPortC
+#define RELAY1_SET_PIN 7
 #define RELAY1_UNSET_PORT gpioPortD
 #define RELAY1_UNSET_PIN 1
 

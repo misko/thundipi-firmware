@@ -15,5 +15,7 @@ double life_accumulator[NRELAYS];
 double trip_accumulator[NRELAYS];
 
 void init_stats();
+void print_stats();
+void update_stats();
 
 #endif

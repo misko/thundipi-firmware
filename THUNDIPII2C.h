@@ -51,6 +51,8 @@
 #define THUNDIPI_SLAVE_I2C_OUR_PASSKEY_OFFSET 	0x05 // 4 bytes
 #define THUNDIPI_SLAVE_I2C_THEIR_PASSKEY_OFFSET 	0x09 // 4 bytes
 #define THUNDIPI_SLAVE_I2C_MASTER_BLE_ADDR_OFFSET	0x0F
+#define THUNDIPI_SLAVE_I2C_MASTER_BLE_INDICATOR_OFFSET      0x16
+#define THUNDIPI_SLAVE_I2C_SLAVE_BLE_ADDR_OFFSET	0x18
 
 struct I2C_THUNDIPII2C {
   sl_i2cspm_t *i2cspm;
@@ -60,12 +62,15 @@ struct I2C_THUNDIPII2C {
 
 void sl_thundipii2c_init(struct I2C_THUNDIPII2C * sensor, uint8_t i2c_addr);
 uint16_t thundipi_read_id(struct I2C_THUNDIPII2C * sensor);
+void thundipi_read_slave_address(struct I2C_THUNDIPII2C * sensor, uint8_t * address);
 void thundipi_write_passkey(struct I2C_THUNDIPII2C * sensor, uint32_t passkey);
-uint32_t get_their_key();
 uint32_t thundipi_read_passkey(struct I2C_THUNDIPII2C * sensor) ;
 void thundipi_write_address(struct I2C_THUNDIPII2C * sensor, uint8_t * address);
 void thundipi_slave_initI2C(void);
-uint8_t * thundipi_read_addr();
+uint8_t * thundipi_read_master_addr();
+uint8_t thundipi_read_master_indicator();
+void thundipi_write_slave_addr(uint8_t * address);
+uint32_t get_their_key();
 
 
 #endif /* THUNDIPII2C_H_ */

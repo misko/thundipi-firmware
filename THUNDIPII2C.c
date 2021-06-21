@@ -200,9 +200,19 @@ void thundipi_write_passkey_to_mem(uint32_t passkey) {
 	memcpy(thundi_pi_slave_i2c_Buffer+THUNDIPI_SLAVE_I2C_OUR_PASSKEY_OFFSET,&passkey_network_order,sizeof(uint32_t));
 }
 
-uint8_t * thundipi_read_addr() {
+uint8_t * thundipi_read_master_addr() {
 	return thundi_pi_slave_i2c_Buffer+THUNDIPI_SLAVE_I2C_MASTER_BLE_ADDR_OFFSET;
 }
+
+uint8_t thundipi_read_master_indicator() {
+	return thundi_pi_slave_i2c_Buffer[THUNDIPI_SLAVE_I2C_MASTER_BLE_INDICATOR_OFFSET];
+}
+
+void thundipi_write_slave_addr(uint8_t * address) {
+	memcpy(thundi_pi_slave_i2c_Buffer+THUNDIPI_SLAVE_I2C_SLAVE_BLE_ADDR_OFFSET,address,6);
+}
+
+
 #endif
 
 
@@ -217,12 +227,20 @@ uint16_t thundipi_read_id(struct I2C_THUNDIPII2C * sensor) {
   return value;
 }
 
+void thundipi_read_slave_address(struct I2C_THUNDIPII2C * sensor, uint8_t * address) {
+  sl_status_t sc =  i2c_read_data(sensor->i2cspm, sensor->m_i2cAddress, THUNDIPI_SLAVE_I2C_SLAVE_BLE_ADDR_OFFSET, 6, (uint8_t*)address);
+  return;
+}
+
 void thundipi_write_passkey(struct I2C_THUNDIPII2C * sensor, uint32_t passkey) {
    i2c_write_data_uint32(sensor->i2cspm, sensor->m_i2cAddress,THUNDIPI_SLAVE_I2C_THEIR_PASSKEY_OFFSET, passkey);
 }
 void thundipi_write_address(struct I2C_THUNDIPII2C * sensor, uint8_t * address) {
 	i2c_write_data(sensor->i2cspm, sensor->m_i2cAddress,
 			THUNDIPI_SLAVE_I2C_MASTER_BLE_ADDR_OFFSET, 6, address);
+	uint8_t one=1;
+	i2c_write_data(sensor->i2cspm, sensor->m_i2cAddress,
+			THUNDIPI_SLAVE_I2C_MASTER_BLE_INDICATOR_OFFSET, 1, &one);
 }
 uint32_t thundipi_read_passkey(struct I2C_THUNDIPII2C * sensor) {
 	uint32_t passkey=0;
