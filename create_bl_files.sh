@@ -1,5 +1,7 @@
-#!/bin/sh
-
+#!/bin/bash
+PATH_PROJ="/Users/michaeldzamba/SimplicityStudio/v5_workspace/thundipi2"
+PATH_GCCARM="/Applications/Simplicity Studio.app/Contents/Eclipse/developer/toolchains/gnu_arm/7.2_2017q4/"
+PATH_SCMD="/Applications/Simplicity Studio.app/Contents/Eclipse/developer/adapter_packs/commander/Commander.app/Contents/MacOS/" #commander
 # use PATH_GCCARM env var to override default path for gcc-arm
 if [[ -z ${PATH_GCCARM} ]]; then
   OBJCOPY="${ARM_GCC_DIR}/bin/arm-none-eabi-objcopy"
@@ -12,7 +14,7 @@ fi
 if [[ -n ${PATH_SCMD} ]]; then
   COMMANDER="${PATH_SCMD}/commander"
 fi
-
+echo "COMMANDER" $COMMANDER
 # use PATH_OUT env var to override the full path for the .out file
 
 # default file extension of GCC and IAR
@@ -32,7 +34,7 @@ GBL_ENCRYPT_KEY_FILE="app-encrypt-key.txt"
 BOOTLOADER_FILE="bootloader-second-stage.s37"
 
 # project path
-PATH_PROJ="$1"
+#PATH_PROJ="$1"
 
 if [ -z "$PATH_PROJ" ]; then
   echo "No project path specified. Using current directory."
@@ -125,6 +127,7 @@ echo "**********************************************************************"
 echo "Creating ${OTA_APPLO_NAME}.gbl for OTA"
 echo "**********************************************************************"
 echo
+echo "${OBJCOPY}" -O srec -j .text_apploader* "${PATH_OUT}" "${PATH_GBL}/${OTA_APPLO_NAME}.srec"
 "${OBJCOPY}" -O srec -j .text_apploader* "${PATH_OUT}" "${PATH_GBL}/${OTA_APPLO_NAME}.srec"
 if [ $? -ne 0 ]; then
   read -rsp $'Press enter to continue...\n'

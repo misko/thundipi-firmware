@@ -8,6 +8,7 @@
 #define NVM_SAVE_DLAY_MSEC (1000*60*30) //30 minutes
 //#define NVM_SAVE_DLAY_MSEC (1000*5) //5 second
 #define PRESS_HOLD_DLAY_MSEC (1000*3) //3 second
+#define DFU_HOLD_DLAY_MSEC (1000*6) //3 second
 #define SETUP_DLAY_MSEC (1000*60) //3 second
 #define SETUP_LED_DLAY_MSEC (250) //3 second
 #include "sl_sleeptimer.h"
@@ -32,6 +33,8 @@ void setup_timer_callback(sl_sleeptimer_timer_handle_t *handle,
 		void *data);
 void setup_led_timer_callback(sl_sleeptimer_timer_handle_t *handle,
 		void *data);
+void dfu_hold_timer_callback(sl_sleeptimer_timer_handle_t *handle,
+		void *data) ;
 void start_relay_timer(int idx);
 void start_debounce_timer(int idx);
 void stop_debounce_timer(int idx);

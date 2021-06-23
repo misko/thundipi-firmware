@@ -66,6 +66,7 @@ void button_debounce_change(uint8_t idx) {
 			return;
 		}
 		start_press_hold_timer();
+		start_dfu_hold_timer();
 
 #if T_TYPE == T_RELAY
 		switch (idx) {
@@ -99,6 +100,7 @@ void button_debounce_change(uint8_t idx) {
 #endif
 	} else {
 		stop_press_hold_timer();
+		stop_dfu_hold_timer();
 	}
 }
 

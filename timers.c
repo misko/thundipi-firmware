@@ -15,6 +15,7 @@ static sl_sleeptimer_timer_handle_t passkey_check_timer;
 static sl_sleeptimer_timer_handle_t current_monitor_timer;
 static sl_sleeptimer_timer_handle_t nvm_save_timer;
 static sl_sleeptimer_timer_handle_t press_hold_timer;
+static sl_sleeptimer_timer_handle_t dfu_hold_timer;
 static sl_sleeptimer_timer_handle_t setup_timer;
 static sl_sleeptimer_timer_handle_t setup_led_timer;
 
@@ -26,6 +27,7 @@ static uint32_t passkey_delay_ticks = 0;
 static uint32_t monitor_delay_ticks = 0;
 static uint32_t nvm_save_delay_ticks = 0;
 static uint32_t press_hold_delay_ticks = 0;
+static uint32_t dfu_hold_delay_ticks = 0;
 static uint32_t setup_delay_ticks = 0;
 static uint32_t setup_led_delay_ticks = 0;
 
@@ -47,6 +49,8 @@ void init_timers() {
 	nvm_save_delay_ticks = ((uint64_t) NVM_SAVE_DLAY_MSEC
 			* sl_sleeptimer_get_timer_frequency()) / 1000;
 	press_hold_delay_ticks = ((uint64_t) PRESS_HOLD_DLAY_MSEC
+			* sl_sleeptimer_get_timer_frequency()) / 1000;
+	dfu_hold_delay_ticks = ((uint64_t) DFU_HOLD_DLAY_MSEC
 			* sl_sleeptimer_get_timer_frequency()) / 1000;
 	setup_delay_ticks = ((uint64_t) SETUP_DLAY_MSEC
 			* sl_sleeptimer_get_timer_frequency()) / 1000;
@@ -103,6 +107,12 @@ void start_press_hold_timer() {
 }
 void stop_press_hold_timer() {
 	sl_sleeptimer_stop_timer(&press_hold_timer);
+}
+void start_dfu_hold_timer() {
+	sl_sleeptimer_start_timer(&dfu_hold_timer, dfu_hold_delay_ticks,dfu_hold_timer_callback, (void*)0x0, 0, 0);
+}
+void stop_dfu_hold_timer() {
+	sl_sleeptimer_stop_timer(&dfu_hold_timer);
 }
 void start_setup_timer() {
 	sl_sleeptimer_start_timer(&setup_timer, setup_delay_ticks,setup_timer_callback, (void*)0x0, 0, 0);
@@ -180,6 +190,13 @@ void press_hold_timer_callback(sl_sleeptimer_timer_handle_t *handle,
 	(void) handle;
 	//TODO optimize to only if current changes
 	sl_bt_external_signal(SIGNAL_PRESS_HOLD);
+}
+void dfu_hold_timer_callback(sl_sleeptimer_timer_handle_t *handle,
+		void *data) {
+	(void) data;
+	(void) handle;
+	//TODO optimize to only if current changes
+	sl_bt_external_signal(SIGNAL_DFU_HOLD);
 }
 void setup_timer_callback(sl_sleeptimer_timer_handle_t *handle,
 		void *data) {

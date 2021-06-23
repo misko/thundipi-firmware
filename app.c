@@ -44,7 +44,7 @@ static uint16_t passkey_repeats = 0;
 
 double currents[NRELAYS];
 double voltages[NRELAYS];
-
+static bool boot_to_dfu = false;
 bd_addr address;
 
 static void
@@ -142,7 +142,7 @@ static void aio_analog_out_read_cb_all(
 static void aio_digital_out_write_cb_all(
 		sl_bt_evt_gatt_server_user_write_request_t *data) {
 	sl_status_t sc;
-	uint8_t att_errorcode = 0;
+
 	for (int i = 0; i < data->value.len; i++) {
 
 		if (data->value.data[i] == RELAY_OFF) {
@@ -155,6 +155,7 @@ static void aio_digital_out_write_cb_all(
 		} else {
 		}
 	}
+	uint8_t att_errorcode = 0;
 	sc = sl_bt_gatt_server_send_user_write_response(data->connection,
 			data->characteristic, att_errorcode);
 	sl_app_assert(sc == SL_STATUS_OK,
@@ -166,7 +167,7 @@ static void aio_digital_out_write_cb_all(
  * Misc
  *****************************************************************************/
 //ary must be len 18 at least
-void bd_addr_to_char(uint8_t * addr, char *ary) {
+void bd_addr_to_char(uint8_t *addr, char *ary) {
 	for (uint8_t i = 0; i < 6; i++) {
 		/* Convert to hexadecimal (capital letters) with minimum width of 2 and '0' stuffing
 		 * More info on the sprintf parameters here: https://www.tutorialspoint.com/c_standard_library/c_function_sprintf.htm
@@ -247,6 +248,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 
 		sl_bt_sm_set_bondable_mode(1);
 
+
 #if T_TYPE == T_RELAY
 		sl_bt_sm_set_bondable_mode(1);
 		printf("RELAY sl_bt_evt_system_boot_id\r\n\n");
@@ -261,6 +263,11 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		//sl_app_assert(sc == SL_STATUS_OK,
 		//              "[E: 0x%04x] Failed to set using random passkeys\r\n",
 		//              (int)sc);
+
+		//printf("BLINK\r\n\n");
+		//set_discoverable();
+		//printf("REBOOT TO DFU\r\n\n");
+		//sl_bt_system_reset(2); // TODO RESET this breaks
 		break;
 	case sl_bt_evt_scanner_scan_report_id:
 		if (process_scan_response(&(evt->data.evt_scanner_scan_report)) == 1) {
@@ -336,7 +343,9 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 		_service_handle = evt->data.evt_gatt_service.service;
 	}
-	printf("FOUND SERVIC %x %x \r\n\n",evt->data.evt_gatt_service.uuid.data[0],evt->data.evt_gatt_service.uuid.data[1]);
+		printf("FOUND SERVIC %x %x \r\n\n",
+				evt->data.evt_gatt_service.uuid.data[0],
+				evt->data.evt_gatt_service.uuid.data[1]);
 		break;
 
 	case sl_bt_evt_gatt_characteristic_id:
@@ -356,7 +365,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 					evt->data.evt_gatt_procedure_completed.connection,
 					_service_handle, 2, UUID_RELAY_CHAR);
 		}
-		if (app_state==SWITCH_GET_CHAR) {
+		if (app_state == SWITCH_GET_CHAR) {
 			//printf("GOT THE SERV AND CHAR\r\n\n");
 		}
 		break;
@@ -387,7 +396,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		break;
 		// Event raised by the security manager when a passkey needs to be confirmed
 	case sl_bt_evt_sm_confirm_passkey_id:
-		app_state=RELAY_CONFIRM;
+		app_state = RELAY_CONFIRM;
 		printf(
 				"Do you see this passkey on the other device: %06lu? (y/n)\r\n\n",
 				evt->data.evt_sm_confirm_passkey.passkey);
@@ -411,7 +420,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		printf("Bonded\r\n\n");
 #if T_TYPE == T_RELAY
 		unset_discoverable();
-		app_state=RELAY_SERVE;
+		app_state = RELAY_SERVE;
 #endif
 
 		//printf("--------------------------------------\r\n\n");
@@ -565,6 +574,12 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		//sl_bt_scanner_start(1, scanner_discover_generic);
 		app_state = SWITCH_I2C_WAIT;
 #endif
+
+		if (boot_to_dfu) {
+			printf("BOOT TO DFU!!!\r\n\n");
+			// Reset MCU and enter OTA DFU mode.
+			//sl_bt_system_reset(2);
+		}
 		break;
 
 	case sl_bt_evt_gatt_server_user_read_request_id:
@@ -592,14 +607,36 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 					&evt->data.evt_gatt_server_user_write_request);
 
 			break;
+		case gattdb_ota_control:
+			// Set flag to enter OTA mode.
+			boot_to_dfu = true;
+			printf("SET BOOT TO DFU!!!\r\n\n");
+			sl_bt_system_reset(2);
+			// Send response to user write request.
+			uint8_t att_errorcode = 0;
+			sl_status_t sc = sl_bt_gatt_server_send_user_write_response(
+					evt->data.evt_gatt_server_user_write_request.connection,
+					evt->data.evt_gatt_server_user_write_request.characteristic,
+					att_errorcode);
+			sl_app_assert(sc == SL_STATUS_OK,
+					"[E: 0x%04x] Failed to send response to user write request\n",
+					(int)sc);
+			// Close connection to enter to DFU OTA mode
+			/*sl_status_t sc = sl_bt_connection_close(
+					evt->data.evt_gatt_server_user_write_request.connection);
+			sl_app_assert(sc == SL_STATUS_OK,
+					"[E: 0x%04x] Failed to close connection to enter to DFU OTA mode\n",
+					(int)sc);*/
+			break;
 		default:
 			// printf("WRITE TO WTF\r\n\n");
 			break;
 		}
+
 		break;
 	case sl_bt_evt_system_external_signal_id:
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
-			double s[NRELAYS];
+			//double s[NRELAYS];
 
 			for (int i = 0; i < live_connections; i++) {
 				sl_bt_gatt_server_send_characteristic_notification(
@@ -639,19 +676,21 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_I2C_CHECK) {
 #if T_TYPE == T_RELAY
 			uint16_t thundi_id = thundipi_read_id(&thundipii2c_sensor);
-			if (thundi_id == 0xF1E2 && i2c_thundi_state==I2C_THUNDI_DISCONNECTED) {
-				i2c_thundi_state=I2C_THUNDI_CONNECTED;
+			if (thundi_id == 0xF1E2
+					&& i2c_thundi_state == I2C_THUNDI_DISCONNECTED) {
+				i2c_thundi_state = I2C_THUNDI_CONNECTED;
 				printf("Physically connected to thunidpi !\r\n\n");
 				thundipi_write_address(&thundipii2c_sensor, address.addr);
 				set_discoverable();
 				//read the other side address
 				uint8_t target_address[6];
 				char target_address_str[20];
-				thundipi_read_slave_address(&thundipii2c_sensor, target_address);
-				bd_addr_to_char(target_address,target_address_str);
-				printf("Remote ADDR %s\r\n\n",target_address_str);
+				thundipi_read_slave_address(&thundipii2c_sensor,
+						target_address);
+				bd_addr_to_char(target_address, target_address_str);
+				printf("Remote ADDR %s\r\n\n", target_address_str);
 			} else {
-				i2c_thundi_state=I2C_THUNDI_DISCONNECTED;
+				i2c_thundi_state = I2C_THUNDI_DISCONNECTED;
 			}
 #endif
 
@@ -670,14 +709,15 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 				& SIGNAL_PASSKEY_ACCEPT) {
 			sl_bt_sm_passkey_confirm(bt_bonding_connection, 1);
 			printf("CONRIMGED\r\n\n");
-			passkey_repeats=0;
+			passkey_repeats = 0;
 			stop_passkey_timer();
 		}
 		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_PASSKEY_CHECK) {
 #if T_TYPE == T_RELAY
 			uint32_t slave_passkey = thundipi_read_passkey(&thundipii2c_sensor);
-			printf("READ PASSKEY FOM SLAVE %d vs %d \r\n\n",slave_passkey, bt_bonding_passkey);
+			printf("READ PASSKEY FOM SLAVE %d vs %d \r\n\n", slave_passkey,
+					bt_bonding_passkey);
 			if (slave_passkey == bt_bonding_passkey) {
 
 				printf("Trying to bonding\r\n\n", slave_passkey); //TODO PHONE BONDING HERE!
@@ -712,9 +752,18 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_PRESS_HOLD) {
 			printf("HOLDING\r\n\n");
+
+			//sl_bt_system_reset(2);
 			set_discoverable();
 		}
-		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_SETUP_TIMEOUT) {
+		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_DFU_HOLD) {
+			printf("DFU MOD!\r\n\n");
+
+			sl_bt_system_reset(2);
+		}
+
+		if (evt->data.evt_system_external_signal.extsignals
+				& SIGNAL_SETUP_TIMEOUT) {
 			printf("SETUP TIMEOUT\r\n\n");
 			unset_discoverable();
 		}
@@ -745,8 +794,7 @@ void set_discoverable() {
 			"[E: 0x%04x] Failed to set advertising timing\n", (int )sc);
 	// Start general advertising and enable connections.
 	sc = sl_bt_advertiser_start(advertising_set_handle,
-			advertiser_general_discoverable,
-			advertiser_connectable_scannable);
+			advertiser_general_discoverable, advertiser_connectable_scannable);
 	sl_app_assert(sc == SL_STATUS_OK,
 			"[E: 0x%04x] Failed to start advertising\n", (int )sc);
 }
@@ -825,11 +873,11 @@ void sl_bt_on_event(sl_bt_msg_t *evt) {
 		// This event indicates that a connection was closed.
 	case sl_bt_evt_connection_closed_id:
 		/*/ Restart advertising after client has disconnected.
-		/sc = sl_bt_advertiser_start(advertising_set_handle,
-				advertiser_general_discoverable,
-				advertiser_connectable_scannable);
-		sl_app_assert(sc == SL_STATUS_OK,
-				"[E: 0x%04x] Failed to restart advertising 2\n", (int )sc);*/
+		 /sc = sl_bt_advertiser_start(advertising_set_handle,
+		 advertiser_general_discoverable,
+		 advertiser_connectable_scannable);
+		 sl_app_assert(sc == SL_STATUS_OK,
+		 "[E: 0x%04x] Failed to restart advertising 2\n", (int )sc);*/
 		break;
 
 	case sl_bt_evt_gatt_server_user_write_request_id:
