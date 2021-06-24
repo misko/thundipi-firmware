@@ -1,5 +1,5 @@
 #CRC Codes for initially generated config files -- do not modify!
-#Thu Jun 03 12:01:04 PDT 2021
+#Wed Jun 23 11:28:26 PDT 2021
 sl_bluetooth_config.h=2139754349
 sl_hfxo_manager_config.h=518269156
 sl_simple_button_relayButton0_config.h=-562111490
@@ -16,6 +16,7 @@ sl_mx25_flash_shutdown_usart_config.h=-283962480
 sl_simple_button_btn0_config.h=-974503450
 sl_i2cspm_INA3221_config.h=838194025
 sl_device_init_hfxo_config.h=1335716894
+app_log_config.h=-903009472
 sl_simple_button_relayButon2_config.h=92359595
 sl_app_log_config.h=-1573307542
 sl_i2cspm_ads1115_config.h=305712137

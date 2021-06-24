@@ -5,8 +5,8 @@
 #define PASSKEY_DLAY_MSEC 1000
 #define MONITOR_DLAY_SEC 0.5
 #define MONITOR_DLAY_MSEC (MONITOR_DLAY_SEC*1000)
-#define NVM_SAVE_DLAY_MSEC (1000*60*30) //30 minutes
-//#define NVM_SAVE_DLAY_MSEC (1000*5) //5 second
+//#define NVM_SAVE_DLAY_MSEC (1000*60*30) //30 minutes
+#define NVM_SAVE_DLAY_MSEC (1000*5) //5 second
 #define PRESS_HOLD_DLAY_MSEC (1000*3) //3 second
 #define DFU_HOLD_DLAY_MSEC (1000*6) //3 second
 #define SETUP_DLAY_MSEC (1000*60) //3 second
@@ -42,8 +42,12 @@ void start_passkey_timer();
 void stop_passkey_timer();
 void start_press_hold_timer();
 void stop_press_hold_timer();
+void start_dfu_hold_timer();
+void stop_dfu_hold_timer();
 void start_setup_led_timer();
 void stop_setup_led_timer();
 void start_setup_timer();
 void stop_setup_timer();
 void init_timers();
+void start_monitor_timer();
+void stop_monitor_timer();

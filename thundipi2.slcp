@@ -19,6 +19,7 @@ source:
 project_name: thundipi2
 quality: production
 component:
+- {id: app_log}
 - {id: iostream_retarget_stdio}
 - {id: iostream_swo}
 - {id: BGM220PC22WGA}

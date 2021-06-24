@@ -150,7 +150,8 @@ if [ $? -ne 0 ]; then
   read -rsp $'Press enter to continue...\n'
   exit
 fi
-"${COMMANDER}" gbl create "${PATH_GBL}/${OTA_APPLI_NAME}.gbl" --app "${PATH_GBL}/${OTA_APPLI_NAME}.srec"
+#"${COMMANDER}" gbl create "${PATH_GBL}/${OTA_APPLI_NAME}.gbl" --app "${PATH_GBL}/${OTA_APPLI_NAME}.srec"
+"${COMMANDER}" gbl create "${PATH_GBL}/${OTA_APPLI_NAME}.gbl" --app "${PATH_GBL}/${OTA_APPLI_NAME}.srec" --compress lzma
 
 # create the full GBL files for UART DFU
 echo

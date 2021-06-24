@@ -9,6 +9,7 @@ Case enclosure
 OTA update
 5V 12v power indicator
 enter DFU update by holding down alt button [ update before bond is aquired ]
+stats to iOS app
 
 MOVE I2c TO separate bus!
 Convert to kwh instead of mws 

@@ -79,6 +79,8 @@ enum I2C_THUNDI_STATE {
 
 #define PASSKEY_CHECKS 10
 
+#define APP_VERSION 0x0001
+
 extern int app_state;
 
 /**************************************************************************//**
@@ -92,7 +94,7 @@ void app_init(void);
 void app_process_action(void);
 void set_discoverable();
 void unset_discoverable();
-
+void start_advertising();
 
 
 

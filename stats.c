@@ -6,6 +6,9 @@
 #include "INA3221.h"
 
 uint16_t stats_version;
+
+double life_accumulator[NRELAYS];
+double trip_accumulator[NRELAYS];
 /*
  *
  * Computing life time of writes
@@ -67,13 +70,15 @@ void update_stats() {
 
 void print_stats() {
 	for (int i=0; i<NRELAYS; i++)  {
-		int32_t x= life_accumulator[i];
+		int32_t x= 10000*life_accumulator[i];
 		printf("%d\t",x);
 	}
 	printf("\r\n\n");
 	for (int i=0; i<NRELAYS; i++)  {
-		int32_t x= trip_accumulator[i];
+		int32_t x= 10000*trip_accumulator[i];
 		printf("%d\t",x);
 	}
 	printf("\r\n\n");
 }
+
+

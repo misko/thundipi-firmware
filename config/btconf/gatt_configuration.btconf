@@ -33,6 +33,15 @@
         <read authenticated="false" bonded="false" encrypted="false"/>
       </properties>
     </characteristic>
+    
+    <!--Version-->
+    <characteristic const="false" id="version" name="Version" sourceId="" uuid="7793afa5-a2d8-2f94-b731-afad4b22f24c">
+      <informativeText/>
+      <value length="0" type="user" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="true" encrypted="false"/>
+      </properties>
+    </characteristic>
   </service>
   
   <!--Device Information-->
@@ -80,6 +89,36 @@
       <properties>
         <read authenticated="false" bonded="true" encrypted="false"/>
         <notify authenticated="true" bonded="false" encrypted="false"/>
+      </properties>
+    </characteristic>
+    
+    <!--Lifetime Stats-->
+    <characteristic const="false" id="lifetime_stats" name="Lifetime Stats" sourceId="" uuid="8781cb1f-a5c5-8397-6adb-32b9e563acb0">
+      <informativeText/>
+      <value length="0" type="user" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="true" encrypted="false"/>
+        <notify authenticated="false" bonded="true" encrypted="false"/>
+      </properties>
+    </characteristic>
+    
+    <!--Trip Stats-->
+    <characteristic const="false" id="trip_stats" name="Trip Stats" sourceId="" uuid="150424b7-e4f8-429c-e951-23525efb56b8">
+      <informativeText/>
+      <value length="0" type="user" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="true" encrypted="false"/>
+        <notify authenticated="false" bonded="true" encrypted="false"/>
+      </properties>
+    </characteristic>
+    
+    <!--Voltages-->
+    <characteristic const="false" id="voltages" name="Voltages" sourceId="" uuid="e6dbb5ad-f520-5f48-c67d-b467b9f40912">
+      <informativeText/>
+      <value length="0" type="user" variable_length="false"/>
+      <properties>
+        <read authenticated="false" bonded="true" encrypted="false"/>
+        <notify authenticated="false" bonded="true" encrypted="false"/>
       </properties>
     </characteristic>
   </service>

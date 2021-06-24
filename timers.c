@@ -63,23 +63,30 @@ void init_timers() {
 	sl_sleeptimer_start_periodic_timer(&amp_notify_timer,
 			amp_delay_ticks, amp_notify_timer_callback,
 			NULL, 0, 0);
-	sl_sleeptimer_start_periodic_timer(&current_monitor_timer,
-			monitor_delay_ticks, monitor_timer_callback,
-			NULL, 0, 0);
+
 	sl_sleeptimer_start_periodic_timer(&nvm_save_timer,
 			nvm_save_delay_ticks, nvm_save_timer_callback,
 			NULL, 0, 0);
 	sl_sleeptimer_start_periodic_timer(&setup_led_timer,
 			setup_led_delay_ticks, setup_led_timer_callback,
 			NULL, 0, 0);
-#endif
-
 	sl_sleeptimer_start_periodic_timer(&i2c_check_timer,
 			i2c_delay_ticks, i2c_check_timer_callback,
 			NULL, 0, 0);
+#endif
+
 }
 
 /*    */
+void start_monitor_timer() {
+	sl_sleeptimer_start_periodic_timer(&current_monitor_timer,
+			monitor_delay_ticks, monitor_timer_callback,
+			NULL, 0, 0);
+}
+
+void stop_monitor_timer() {
+	sl_sleeptimer_stop_timer(&current_monitor_timer);
+}
 void start_relay_timer(int idx) {
 	sl_sleeptimer_start_timer(relay_timers + idx, relay_delay_ticks,
 			relay_timer_callback, (void*) (int) idx, 0, 0);

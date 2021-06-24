@@ -11,11 +11,12 @@
 #define STATS_TRIP_ACCUMULATOR_KEY 0x102
 extern uint16_t stats_version;
 
-double life_accumulator[NRELAYS];
-double trip_accumulator[NRELAYS];
+extern double life_accumulator[NRELAYS];
+extern double trip_accumulator[NRELAYS];
 
 void init_stats();
 void print_stats();
 void update_stats();
+
 
 #endif

@@ -14,11 +14,15 @@ extern const struct bg_gattdb_def bg_gattdb_data;
 #define gattdb_client_support_features        8
 #define gattdb_device_name                    11
 #define gattdb_height                         15
-#define gattdb_manufacturer_name_string       18
-#define gattdb_system_id                      20
-#define gattdb_switch                         23
-#define gattdb_amps                           26
-#define gattdb_ota_control                    30
+#define gattdb_version                        17
+#define gattdb_manufacturer_name_string       20
+#define gattdb_system_id                      22
+#define gattdb_switch                         25
+#define gattdb_amps                           28
+#define gattdb_lifetime_stats                 31
+#define gattdb_trip_stats                     34
+#define gattdb_voltages                       37
+#define gattdb_ota_control                    41
 
 
 #endif // __GATT_DB_H

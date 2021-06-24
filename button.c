@@ -4,6 +4,7 @@
 
 #include "sl_app_assert.h"
 #include "app.h"
+#include "timers.h"
 
 
 uint8_t button_debounce_state[NRELAYS] = { 0, 0, 0 };
@@ -60,15 +61,16 @@ void channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin) {
 
 void button_debounce_change(uint8_t idx) {
 	if (button_state[idx] == 0) {
+		start_dfu_hold_timer();
+
+#if T_TYPE == T_RELAY
+
 		if (app_state==RELAY_CONFIRM) {
 			printf("CONFIRM the bonding\r\n\n");
 			sl_bt_external_signal(SIGNAL_PASSKEY_ACCEPT);
 			return;
 		}
 		start_press_hold_timer();
-		start_dfu_hold_timer();
-
-#if T_TYPE == T_RELAY
 		switch (idx) {
 		case 0:
 			relay_toggle(0);
