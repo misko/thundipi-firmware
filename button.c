@@ -8,7 +8,7 @@
 
 
 uint8_t button_debounce_state[NRELAYS] = { 0, 0, 0 };
-uint8_t button_state[NRELAYS] = { 255, 255, 255 };
+uint8_t button_state[NRELAYS] = { 0, 0, 0 };
 
 /**************************************************************************//**
  * Button handling
@@ -16,6 +16,8 @@ uint8_t button_state[NRELAYS] = { 255, 255, 255 };
 
 void button_to_port_and_pin(int button, int *port, int *pin) {
 	switch (button) {
+
+#if T_TYPE == T_RELAY
 	case 0:
 		*port = BUTTON1_PORT;
 		*pin = BUTTON1_PIN;
@@ -23,8 +25,60 @@ void button_to_port_and_pin(int button, int *port, int *pin) {
 	default:
 		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid button\n", button);
 	}
+#else
+	case 0:
+		*port = BUTTON1_PORT;
+		*pin = BUTTON1_PIN;
+		break;
+	case 1:
+		*port = BUTTON2_PORT;
+		*pin = BUTTON2_PIN;
+		break;
+	case 2:
+		*port = BUTTON3_PORT;
+		*pin = BUTTON3_PIN;
+		break;
+	default:
+		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid button\n", button);
+	}
+
+#endif
 
 }
+
+void buttonled_to_port_and_pin(int button, int *port, int *pin) {
+	switch (button) {
+
+#if T_TYPE == T_RELAY
+	case 0:
+		*port = BUTTON1_LED_PIN;
+		*pin = BUTTON1_LED_PORT;
+		break;
+	default:
+		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid button\n", button);
+	}
+#else
+	case 0:
+		*port = BUTTON1_LED_PIN;
+		*pin = BUTTON1_LED_PORT;
+		break;
+	case 1:
+		*port = BUTTON2_LED_PIN;
+		*pin = BUTTON2_LED_PORT;
+		break;
+	case 2:
+		*port = BUTTON3_LED_PIN;
+		*pin = BUTTON3_LED_PORT;
+		break;
+	default:
+		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid button\n", button);
+	}
+
+#endif
+
+}
+
+#if T_TYPE == T_RELAY
 void channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin) {
 	switch (channel) {
 	case 0:
@@ -58,6 +112,7 @@ void channel_to_port_and_pin(int channel, int pin_type, int *port, int *pin) {
 		sl_app_assert(1 == 0, "[E: 0x%04x] Invalid channel\n", channel);
 	}
 }
+#endif
 
 void button_debounce_change(uint8_t idx) {
 	if (button_state[idx] == 0) {
@@ -89,30 +144,44 @@ void button_debounce_change(uint8_t idx) {
 		default:
 			break;
 		}
-#else
-		sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
-		int state = GPIO_PinInGet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		printf("STATE IS %d\r\n\n", state);
-		if (state == 1) {
-			GPIO_PinOutClear(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		} else {
 
-			GPIO_PinOutSet(BUTTON1_LED_PORT, BUTTON1_LED_PIN);
-		}
 #endif
 	} else {
 		stop_press_hold_timer();
 		stop_dfu_hold_timer();
 	}
+
+	int port,pin;
+	buttonled_to_port_and_pin(idx,&port,&pin);
+
+	//button_state[idx]=1-button_state[idx];
+
+	printf("BUTTON STATE IS %d %d\r\n\n", idx,button_state[idx]);
+
+	if (button_state[idx] == 0) {
+		GPIO_PinOutClear(port, pin);
+	} else {
+		GPIO_PinOutSet(port, pin);
+	}
+
+
+	sl_bt_external_signal(SIGNAL_SWITCH_TOGGLE);
+
+	button_debounce_state[idx]=0;
 }
 
 void button_change(uint8_t idx) {
 	int port, pin;
 	button_to_port_and_pin(idx, &port, &pin);
-	int state = GPIO_PinInGet(port, pin);
-	//printf("STATE IS %d\r\n\n",state);
-	if (button_debounce_state[idx]!=1 || state!=button_state[idx]) {
+	int state = 1-GPIO_PinInGet(port, pin);
+	for (int i=0; i<NRELAYS; i++) {
+		printf("BUT %d/%d ", i, button_state[i]);
+	}
+	printf("\r\n\n");
+	printf("STATE IS %d %d\r\n\n",idx ,state);
+	if (button_debounce_state[idx]!=1) { // || state!=button_state[idx]) {
 		//start a debounce for this state
+		printf("set STATE IS %d %d\r\n\n",idx ,state);
 		stop_debounce_timer(idx);
 		button_state[idx]=state;
 		button_debounce_state[idx]=1;

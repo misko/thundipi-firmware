@@ -29,7 +29,6 @@ void bt_read_currents(
 	sl_app_assert(sc == SL_STATUS_OK,
 			"[E: 0x%04x] Failed to send user read response\n", (int )sc);
 }
-
 void bt_write_relay_state(
 		sl_bt_evt_gatt_server_user_write_request_t *data) {
 	sl_status_t sc;

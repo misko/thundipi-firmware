@@ -66,12 +66,23 @@ enum I2C_THUNDI_STATE {
 #define SIGNAL_PASSKEY_ACCEPT 0x0200
 #define SIGNAL_DFU_HOLD 0x0400
 
+#define SIGNAL_SWITCH_TOGGLE1 0x0800
+#define SIGNAL_SWITCH_TOGGLE2 0x1000
+#define SIGNAL_SWITCH_TOGGLE3 0x2000
+
+
 #define NRELAYS 3
-#define NBUTTONS 1
 #define T_RELAY 0
 #define T_SWITCH 1
 
-#define T_TYPE 0
+#define T_TYPE 1
+
+#if T_TYPE == T_RELAY
+#define NBUTTONS 1
+#else
+
+#define NBUTTONS 3
+#endif
 
 #define PIN_SET 0
 #define PIN_UNSET 1

@@ -70,10 +70,10 @@ void init_timers() {
 	sl_sleeptimer_start_periodic_timer(&setup_led_timer,
 			setup_led_delay_ticks, setup_led_timer_callback,
 			NULL, 0, 0);
+#endif
 	sl_sleeptimer_start_periodic_timer(&i2c_check_timer,
 			i2c_delay_ticks, i2c_check_timer_callback,
 			NULL, 0, 0);
-#endif
 
 }
 

@@ -229,15 +229,17 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		break;
 
 	case sl_bt_evt_connection_parameters_id:
-		printf("CONNETION LEVEL %d\r\n\n",evt->data.evt_connection_parameters.security_mode);
+		printf("CONNETION LEVEL %d\r\n\n",
+				evt->data.evt_connection_parameters.security_mode);
 		if (evt->data.evt_connection_parameters.security_mode < 2) {
-			/*if (app_state == RELAY_PAIR) {
-				sl_bt_sm_increase_security(
-						evt->data.evt_connection_parameters.connection);
-				printf("INCREASE SECURITY\r\n");
-			} else {
-				printf("Not increasing security, not in bonding mode\r\n\n");
-			}*/
+
+			if ((T_TYPE == T_RELAY) & (app_state == RELAY_PAIR)) {
+			 sl_bt_sm_increase_security(
+			 evt->data.evt_connection_parameters.connection);
+			 printf("INCREASE SECURITY\r\n");
+			 } else {
+			 printf("Not increasing security, not in bonding mode\r\n\n");
+			}
 		} else { //security is >=3
 #if T_TYPE == T_SWITCH
 			if (app_state == SWITCH_SCAN) {
@@ -319,21 +321,16 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		app_state = RELAY_SERVE;
 #endif
 
-		//printf("--------------------------------------\r\n\n");
-		// sl_bt_connection_close(_conn_handle); // not sure if we need this?
 		break;
 
-		// Event raised when bonding failed
-		//reason codes are here, https://docs.silabs.com/mcu/latest/bgm13/group-sl-status
-		//((sl_status_t)0x1006) ->  SL_STATUS_BT_CTRL_PIN_OR_KEY_MISSING   ((sl_status_t)0x1006)
 
 	case sl_bt_evt_connection_opened_id:
 		if (evt->data.evt_connection_opened.bonding == 0xFF) {
 			/*if (app_state == RELAY_PAIR) {
-				printf("Increasing securityXX\r\n");
-				sl_bt_sm_increase_security(
-						evt->data.evt_connection_opened.connection);
-			}*/
+			 printf("Increasing securityXX\r\n");
+			 sl_bt_sm_increase_security(
+			 evt->data.evt_connection_opened.connection);
+			 }*/
 		} else {
 			printf("Already Bonded (ID: %d)\r\n",
 					evt->data.evt_connection_opened.bonding);
@@ -387,7 +384,6 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 			bt_read_relay_state(&evt->data.evt_gatt_server_user_read_request);
 			break;
 		case gattdb_amps:
-			///printf("Reading from amps\r\n\n");
 			bt_read_currents(&evt->data.evt_gatt_server_user_read_request);
 			break;
 		case gattdb_lifetime_stats:
@@ -409,17 +405,18 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 		break;
 
+#if T_TYPE == T_RELAY
 	case sl_bt_evt_gatt_server_user_write_request_id:
 		switch (evt->data.evt_gatt_server_user_read_request.characteristic) {
 		case gattdb_switch:
 			bt_write_relay_state(&evt->data.evt_gatt_server_user_write_request);
-
 			break;
 
 		default:
 			break;
 		}
 		break;
+#endif
 
 	case sl_bt_evt_system_external_signal_id:
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_AMP_NOTIFY) {
@@ -443,7 +440,12 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		if (evt->data.evt_system_external_signal.extsignals
 				& SIGNAL_SWITCH_TOGGLE) {
 			if (_char_handle > 0) {
-				uint8_t toggle[NRELAYS] = { 0x03, 0x03, 0x02 };
+				uint8_t toggle[NRELAYS] = { 0x03, 0x03, 0x03 }; //0x03 NO-OP,0x02 toggle
+				for (int i=0; i<NRELAYS; i++) {
+					if (button_state[i]==1) {
+						toggle[i]=0x02;
+					}
+				}
 				sl_bt_gatt_write_characteristic_value(_conn_handle,
 						_char_handle,
 						NRELAYS, toggle);
@@ -519,7 +521,7 @@ void sl_bt_aio_process(sl_bt_msg_t *evt) {
 		}
 #if T_TYPE == T_RELAY
 		if (evt->data.evt_system_external_signal.extsignals & SIGNAL_MONITOR) {
-			printf("SIGNAL MONITOR!!!\r\n\n");
+			//printf("SIGNAL MONITOR!!!\r\n\n");
 			INA3221_accumulate_mW(&ina3221_sensor, 1);
 			INA3221_accumulate_mW(&ina3221_sensor, 2);
 			INA3221_accumulate_mW(&ina3221_sensor, 3);

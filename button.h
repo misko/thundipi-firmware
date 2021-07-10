@@ -1,6 +1,7 @@
 #include "app.h"
 
 extern uint8_t button_debounce_state[NRELAYS];
+extern uint8_t button_state[NRELAYS];
 void
 button_change(uint8_t idx);
 void
